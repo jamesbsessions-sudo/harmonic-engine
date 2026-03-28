@@ -13,6 +13,9 @@ WORKDIR /app
 # Install numpy first (required by vamp/chord-extractor setup.py)
 RUN pip install --no-cache-dir numpy==1.26.4
 
+# Install PyTorch CPU-only (keeps image smaller, Demucs doesn't need GPU here)
+RUN pip install --no-cache-dir torch==2.1.2+cpu torchaudio==2.1.2+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
+
 # Install remaining dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -20,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 ENV PORT=8000
+# Force Demucs to use CPU and limit threads to save memory
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
 EXPOSE 8000
 
 CMD ["python", "app.py"]
