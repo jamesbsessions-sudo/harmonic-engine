@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install numpy first
+# Install numpy first (required by vamp/chord-extractor setup.py)
 RUN pip install --no-cache-dir numpy==1.26.4
 
-# Install PyTorch CPU-only (Demucs needs it, no GPU required)
+# Install PyTorch CPU-only
 RUN pip install --no-cache-dir torch==2.1.2+cpu torchaudio==2.1.2+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
 # Install remaining dependencies
