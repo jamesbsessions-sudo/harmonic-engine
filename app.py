@@ -240,40 +240,85 @@ def build_chord_progression(bass_notes, harmonic_chroma, beat_times, key):
     """
     Combine bass roots with harmonic chroma to build a chord progression.
     Bass gives us the root, chroma gives us the quality.
+    
+    Key improvement: group consecutive beats with the same bass root,
+    average the chroma across the group, then determine quality once.
+    This prevents flickering between maj7/9/5 on every beat.
     """
-    chord_at_beat = []
+    if not bass_notes:
+        return [], []
 
-    for i, bass_note in enumerate(bass_notes):
-        if bass_note is None:
-            chord_at_beat.append(None)
-            continue
+    # ── Step 1: Group consecutive beats by bass root ───────────
+    groups = []  # list of (root, start_beat, end_beat)
+    current_root = bass_notes[0]
+    current_start = 0
 
-        if i < harmonic_chroma.shape[1]:
-            chroma_frame = harmonic_chroma[:, i]
-        else:
-            chroma_frame = np.zeros(12)
+    for i in range(1, len(bass_notes)):
+        note = bass_notes[i]
+        # Treat None as continuation of previous root
+        if note is not None and note != current_root:
+            groups.append((current_root, current_start, i - 1))
+            current_root = note
+            current_start = i
+    # Don't forget the last group
+    groups.append((current_root, current_start, len(bass_notes) - 1))
 
-        chord_name = identify_chord_quality(bass_note, chroma_frame, threshold=0.3)
-        chord_name = normalise_enharmonic(chord_name, key)
-        chord_at_beat.append(chord_name)
-
-    # ── Build timestamped output ───────────────────────────────
-    # Merge consecutive identical chords into single entries
+    # ── Step 2: For each group, average the chroma and determine quality
     chord_timestamps = []
     progression = []
 
-    for i, chord in enumerate(chord_at_beat):
-        if chord is None:
+    for root, start, end in groups:
+        if root is None:
             continue
 
-        time = round(beat_times[i], 2) if i < len(beat_times) else 0.0
+        # Skip very short groups (1 beat) at the start — likely artefacts
+        duration_beats = end - start + 1
+        if duration_beats <= 1 and start == 0:
+            continue
+
+        # Average chroma across all beats in this group
+        chroma_frames = []
+        for i in range(start, end + 1):
+            if i < harmonic_chroma.shape[1]:
+                chroma_frames.append(harmonic_chroma[:, i])
+
+        if chroma_frames:
+            avg_chroma = np.mean(chroma_frames, axis=0)
+        else:
+            avg_chroma = np.zeros(12)
+
+        # Determine chord quality from averaged chroma
+        chord_name = identify_chord_quality(root, avg_chroma, threshold=0.3)
+        chord_name = normalise_enharmonic(chord_name, key)
+
+        # Get timestamp from the start of this group
+        time = round(beat_times[start], 2) if start < len(beat_times) else 0.0
 
         # Only add if different from previous chord
-        if not chord_timestamps or chord_timestamps[-1]["chord"] != chord:
-            chord_timestamps.append({"time": time, "chord": chord})
+        if not chord_timestamps or chord_timestamps[-1]["chord"] != chord_name:
+            chord_timestamps.append({"time": time, "chord": chord_name})
 
-        if not progression or progression[-1] != chord:
-            progression.append(chord)
+        if not progression or progression[-1] != chord_name:
+            progression.append(chord_name)
+
+    # ── Step 3: Filter out chords shorter than ~1 second ───────
+    if len(chord_timestamps) > 1:
+        filtered = []
+        for i, entry in enumerate(chord_timestamps):
+            if i + 1 < len(chord_timestamps):
+                duration = chord_timestamps[i + 1]["time"] - entry["time"]
+            else:
+                duration = float('inf')
+
+            # Keep if it lasts at least 1 second
+            if duration >= 1.0:
+                filtered.append(entry)
+            # Always keep the last chord
+            elif i == len(chord_timestamps) - 1:
+                filtered.append(entry)
+
+        chord_timestamps = filtered
+        progression = [e["chord"] for e in chord_timestamps]
 
     return chord_timestamps, progression
 
