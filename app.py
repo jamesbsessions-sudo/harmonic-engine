@@ -437,12 +437,21 @@ def detect_time_signature(y, sr, tempo):
 
 
 # ── Half-time / double-time detection ─────────────────────────────
-def detect_tempo_feel(y, sr, tempo):
+def detect_tempo_feel(y, sr, tempo, drum_path=None):
     """
-    Detect whether the track feels half-time, normal, or double-time
-    by analysing onset density relative to the beat grid.
+    Detect whether the track feels half-time, normal, or double-time.
+    Uses the drum stem if available (more reliable than full mix which
+    picks up hi-hats and subdivisions as onsets).
     """
-    onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+    if drum_path:
+        try:
+            y_drums, sr = librosa.load(drum_path, sr=sr, mono=True)
+            onset_frames = librosa.onset.onset_detect(y=y_drums, sr=sr)
+        except Exception:
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+    else:
+        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+
     onset_times = librosa.frames_to_time(onset_frames, sr=sr)
     duration = librosa.get_duration(y=y, sr=sr)
 
@@ -450,19 +459,17 @@ def detect_tempo_feel(y, sr, tempo):
         return "normal", tempo
 
     onsets_per_second = len(onset_times) / duration
-
-    # Expected onsets per second at this tempo
     beats_per_second = tempo / 60.0
 
-    # Ratio of actual onsets to expected beats
     if beats_per_second > 0:
         ratio = onsets_per_second / beats_per_second
     else:
         return "normal", tempo
 
-    if ratio < 0.6:
+    # Wider thresholds — only flag half/double time when it's very clear
+    if ratio < 0.4:
         return "half-time", tempo / 2
-    elif ratio > 2.0:
+    elif ratio > 3.5:
         return "double-time", tempo * 2
     else:
         return "normal", tempo
@@ -533,7 +540,7 @@ def extract_melody(vocal_path: str, sr=44100):
         hop_length=160,  # 10ms at 16kHz
         fmin=65,         # C2
         fmax=2093,       # C7
-        model='small',   # Use small model for speed
+        model='tiny',    # Use tiny model for speed
         device='cpu',
         return_periodicity=True,
         batch_size=512,
@@ -857,7 +864,6 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
     time_sig, beats_per_bar = detect_time_signature(y, sr, tempo)
-    tempo_feel, feel_tempo = detect_tempo_feel(y, sr, tempo)
 
     # ── Stem separation ────────────────────────────────────────
     stem_dir = str(WORK_DIR / f"{song_id}_stems")
@@ -873,6 +879,10 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     try:
         stems = separate_full_stems(wav_path, stem_dir)
         separation_used = True
+
+        # Tempo feel (use drum stem if available)
+        drum_path = stems.get("drums", None)
+        tempo_feel, feel_tempo = detect_tempo_feel(y, sr, tempo, drum_path)
 
         # Bass roots
         if "bass" in stems:
@@ -911,6 +921,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     except Exception as e:
         separation_used = False
         demucs_error = f"Demucs failed: {str(e)[:200]}"
+        tempo_feel, feel_tempo = detect_tempo_feel(y, sr, tempo)
 
         # Fallback chord detection
         full_chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
