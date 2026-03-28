@@ -1,6 +1,7 @@
 """
-Harmonic Taste Profiling Engine — MVP Backend v2
-Now using Chordino (via chord-extractor) for proper chord recognition.
+Harmonic Taste Profiling Engine — MVP Backend v3
+Chordino for chord recognition + bass-focused root correction,
+enharmonic normalisation, and minimum duration filtering.
 """
 
 import os
@@ -16,6 +17,7 @@ import uvicorn
 
 import librosa
 import numpy as np
+from scipy.signal import butter, sosfilt
 from chord_extractor.extractors import Chordino
 
 app = FastAPI(title="Harmonic Taste Profiling Engine")
@@ -35,6 +37,141 @@ WORK_DIR.mkdir(exist_ok=True)
 chordino = Chordino(roll_on=1)
 
 
+# ── Enharmonic spelling table ─────────────────────────────────────
+ENHARMONIC_MAP = {
+    'C#': 'Db', 'D#': 'Eb', 'F#': 'Gb', 'G#': 'Ab', 'A#': 'Bb',
+}
+FLAT_KEYS = {'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb',
+             'Dm', 'Gm', 'Cm', 'Fm', 'Bbm', 'Ebm'}
+
+
+def normalise_enharmonic(chord_name: str, key: str) -> str:
+    """Respell sharp chord names as flats when the key uses flats."""
+    key_root = key.split()[0] if ' ' in key else key
+    use_flats = key_root in FLAT_KEYS or 'b' in key_root
+
+    if not use_flats:
+        return chord_name
+
+    for sharp, flat in ENHARMONIC_MAP.items():
+        if chord_name.startswith(sharp):
+            return flat + chord_name[len(sharp):]
+
+    return chord_name
+
+
+# ── Bass note detection via low-pass filter ───────────────────────
+def detect_bass_notes(y, sr, beat_frames):
+    """
+    Low-pass filter the audio to isolate bass frequencies,
+    then detect the dominant pitch per beat to find bass roots.
+    """
+    nyquist = sr / 2
+    cutoff = 300
+    sos = butter(5, cutoff / nyquist, btype='low', output='sos')
+    y_bass = sosfilt(sos, y)
+
+    bass_chroma = librosa.feature.chroma_cqt(
+        y=y_bass, sr=sr,
+        fmin=librosa.note_to_hz('C1'),
+        n_octaves=3,
+    )
+
+    if len(beat_frames) > 1:
+        beat_chroma = librosa.util.sync(bass_chroma, beat_frames, aggregate=np.median)
+    else:
+        beat_chroma = bass_chroma
+
+    note_names = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+
+    bass_notes = []
+    for i in range(beat_chroma.shape[1]):
+        frame = beat_chroma[:, i]
+        if frame.sum() > 0:
+            best_note_idx = frame.argmax()
+            bass_notes.append(note_names[best_note_idx])
+        else:
+            bass_notes.append(None)
+
+    return bass_notes
+
+
+def correct_chord_with_bass(chord_name: str, bass_note: str) -> str:
+    """
+    If the bass note disagrees with the chord root, and the bass note
+    is a more likely root, replace the chord root while keeping the quality.
+    """
+    if not bass_note or chord_name == 'N':
+        return chord_name
+
+    if len(chord_name) > 1 and chord_name[1] in ('#', 'b'):
+        chord_root = chord_name[:2]
+        chord_quality = chord_name[2:]
+    else:
+        chord_root = chord_name[0]
+        chord_quality = chord_name[1:]
+
+    enharmonic_equiv = {
+        'C#': 'Db', 'Db': 'C#', 'D#': 'Eb', 'Eb': 'D#',
+        'F#': 'Gb', 'Gb': 'F#', 'G#': 'Ab', 'Ab': 'G#',
+        'A#': 'Bb', 'Bb': 'A#',
+    }
+
+    roots_match = (
+        chord_root == bass_note or
+        enharmonic_equiv.get(chord_root) == bass_note
+    )
+
+    if roots_match:
+        return chord_name
+
+    note_to_num = {
+        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+        'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
+        'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
+    }
+
+    chord_num = note_to_num.get(chord_root, -1)
+    bass_num = note_to_num.get(bass_note, -1)
+
+    if chord_num == -1 or bass_num == -1:
+        return chord_name
+
+    interval = (chord_num - bass_num) % 12
+
+    # If the interval is a 3rd (3 or 4 semitones) or 5th (7 semitones),
+    # the bass note is likely the true root and Chordino detected an inversion
+    if interval in (3, 4, 7):
+        return bass_note + chord_quality
+
+    return chord_name
+
+
+# ── Chord filtering ───────────────────────────────────────────────
+def filter_chord_changes(chord_changes, min_duration=0.8):
+    """
+    Remove chord changes that last less than min_duration seconds.
+    These are likely detection artefacts rather than real harmonic changes.
+    """
+    if not chord_changes:
+        return chord_changes
+
+    filtered = []
+    for i, change in enumerate(chord_changes):
+        if change.chord == 'N':
+            continue
+
+        if i + 1 < len(chord_changes):
+            duration = chord_changes[i + 1].timestamp - change.timestamp
+        else:
+            duration = float('inf')
+
+        if duration >= min_duration:
+            filtered.append(change)
+
+    return filtered
+
+
 # ── Models ────────────────────────────────────────────────────────
 class AnalyseURLRequest(BaseModel):
     url: str
@@ -48,6 +185,7 @@ class AnalysisResult(BaseModel):
     time_signature: str
     chords: list[str]
     chord_timestamps: list[dict]
+    bass_notes_detected: list[str]
     melody_range: str
     melody_contour: str
     rhythm_syncopation: str
@@ -120,39 +258,51 @@ def analyse_audio(wav_path: str) -> dict:
     else:
         tempo = float(tempo)
 
-    # ── Chord detection (Chordino) ─────────────────────────────
+    # ── Bass note detection ────────────────────────────────────
+    bass_notes = detect_bass_notes(y, sr, beat_frames)
+
+    # ── Chord detection (Chordino) + bass correction ───────────
     try:
         chord_changes = chordino.extract(wav_path)
-        # chord_changes is a list of ChordChange(chord='X', timestamp=0.0)
-        
-        # Build timestamped chord list
+
+        # Step 1: Filter out short-lived chords
+        chord_changes = filter_chord_changes(chord_changes, min_duration=0.8)
+
+        # Step 2: Build timestamped chord list with bass correction
         chord_timestamps = []
-        seen_chords = []
         unique_chords = []
-        
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
         for change in chord_changes:
             chord_name = change.chord
-            if chord_name == 'N':  # N = no chord / silence
+            if chord_name == 'N':
                 continue
-            
+
+            # Find the closest beat to this chord change
+            if len(beat_times) > 0 and len(bass_notes) > 0:
+                beat_idx = np.argmin(np.abs(beat_times - change.timestamp))
+                if beat_idx < len(bass_notes) and bass_notes[beat_idx]:
+                    chord_name = correct_chord_with_bass(chord_name, bass_notes[beat_idx])
+
+            # Normalise enharmonic spelling
+            chord_name = normalise_enharmonic(chord_name, best_key)
+
             chord_timestamps.append({
                 "time": round(change.timestamp, 2),
                 "chord": chord_name,
             })
-            
-            if chord_name not in seen_chords:
-                seen_chords.append(chord_name)
+
+            if chord_name not in unique_chords:
                 unique_chords.append(chord_name)
 
-        # Also build a progression (ordered, with repeats removed if consecutive)
+        # Build progression (consecutive duplicates removed)
         progression = []
-        for change in chord_changes:
-            if change.chord != 'N':
-                if not progression or progression[-1] != change.chord:
-                    progression.append(change.chord)
-        
+        for entry in chord_timestamps:
+            if not progression or progression[-1] != entry["chord"]:
+                progression.append(entry["chord"])
+
         chords = progression[:12] if progression else ["Could not detect"]
-        
+
     except Exception as e:
         chords = [f"Detection error: {str(e)[:100]}"]
         chord_timestamps = []
@@ -191,14 +341,14 @@ def analyse_audio(wav_path: str) -> dict:
 
     # ── Rhythm ─────────────────────────────────────────────────
     if len(beat_frames) > 1:
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+        beat_times_r = librosa.frames_to_time(beat_frames, sr=sr)
         onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
         onset_times = librosa.frames_to_time(onset_frames, sr=sr)
 
         offbeat_count = 0
         for ot in onset_times:
-            for i in range(len(beat_times) - 1):
-                mid_point = (beat_times[i] + beat_times[i + 1]) / 2
+            for i in range(len(beat_times_r) - 1):
+                mid_point = (beat_times_r[i] + beat_times_r[i + 1]) / 2
                 if abs(ot - mid_point) < 0.05:
                     offbeat_count += 1
         syncopation = offbeat_count / max(len(onset_times), 1)
@@ -236,12 +386,19 @@ def analyse_audio(wav_path: str) -> dict:
     else:
         swing = 0.5
 
+    # Normalise bass notes for output
+    bass_notes_normalised = [
+        normalise_enharmonic(n, best_key) if n else "—"
+        for n in bass_notes
+    ]
+
     return {
         "key": best_key,
         "tempo_bpm": round(tempo, 1),
         "time_signature": "4/4",
         "chords": chords,
         "chord_timestamps": chord_timestamps,
+        "bass_notes_detected": bass_notes_normalised[:16],
         "melody_range": melody_range,
         "melody_contour": contour,
         "rhythm_syncopation": sync_label,
@@ -253,7 +410,7 @@ def analyse_audio(wav_path: str) -> dict:
 # ── Endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 def health():
-    return {"status": "ok", "service": "harmonic-taste-profiling-engine", "version": "2.0"}
+    return {"status": "ok", "service": "harmonic-taste-profiling-engine", "version": "3.0"}
 
 
 @app.post("/analyse/url", response_model=AnalysisResult)
