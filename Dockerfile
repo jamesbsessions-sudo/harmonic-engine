@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install numpy first (required by vamp/chord-extractor setup.py)
+# Install numpy first
 RUN pip install --no-cache-dir numpy==1.26.4
 
-# Install PyTorch CPU-only (keeps image smaller, Demucs doesn't need GPU here)
+# Install PyTorch CPU-only (Demucs needs it, no GPU required)
 RUN pip install --no-cache-dir torch==2.1.2+cpu torchaudio==2.1.2+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
 
 # Install remaining dependencies
@@ -23,9 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 ENV PORT=8000
-# Force Demucs to use CPU and limit threads to save memory
-ENV OMP_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
+ENV OMP_NUM_THREADS=2
+ENV MKL_NUM_THREADS=2
 EXPOSE 8000
 
 CMD ["python", "app.py"]
