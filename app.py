@@ -1,8 +1,6 @@
 """
-Harmonic Taste Profiling Engine — MVP Backend
-Accepts a URL (Instagram/YouTube) or uploaded audio file,
-extracts audio, runs harmonic/melodic/rhythmic analysis,
-returns structured JSON.
+Harmonic Taste Profiling Engine — MVP Backend v2
+Now using Chordino (via chord-extractor) for proper chord recognition.
 """
 
 import os
@@ -18,6 +16,7 @@ import uvicorn
 
 import librosa
 import numpy as np
+from chord_extractor.extractors import Chordino
 
 app = FastAPI(title="Harmonic Taste Profiling Engine")
 
@@ -32,6 +31,9 @@ app.add_middleware(
 WORK_DIR = Path(tempfile.gettempdir()) / "harmonic-engine"
 WORK_DIR.mkdir(exist_ok=True)
 
+# Initialise Chordino once at startup
+chordino = Chordino(roll_on=1)
+
 
 # ── Models ────────────────────────────────────────────────────────
 class AnalyseURLRequest(BaseModel):
@@ -45,6 +47,7 @@ class AnalysisResult(BaseModel):
     tempo_bpm: float
     time_signature: str
     chords: list[str]
+    chord_timestamps: list[dict]
     melody_range: str
     melody_contour: str
     rhythm_syncopation: str
@@ -85,55 +88,11 @@ def to_wav(input_path: str, output_path: str) -> str:
     return output_path
 
 
-# ── Chord detection using chroma features ─────────────────────────
-def detect_chords(y, sr):
-    """Simple chord detection using chroma features and template matching."""
-    # Chord templates (major and minor triads)
-    chord_names = [
-        'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
-        'Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm'
-    ]
-
-    # Major triad: root, major third, fifth
-    major_template = np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-    # Minor triad: root, minor third, fifth
-    minor_template = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-
-    templates = []
-    for i in range(12):
-        templates.append(np.roll(major_template, i))
-    for i in range(12):
-        templates.append(np.roll(minor_template, i))
-    templates = np.array(templates)
-
-    # Get chroma features, segment by beats
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-    beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
-
-    # Match each beat to a chord
-    detected = []
-    for i in range(beat_chroma.shape[1]):
-        frame = beat_chroma[:, i]
-        if frame.sum() == 0:
-            continue
-        frame = frame / frame.sum()
-        # Correlate with each template
-        scores = [np.corrcoef(frame, t)[0, 1] for t in templates]
-        best = np.argmax(scores)
-        chord = chord_names[best]
-        if not detected or detected[-1] != chord:
-            detected.append(chord)
-
-    # Return unique chord progression (first 8)
-    return detected[:8] if detected else ["Could not detect"]
-
-
 # ── Core analysis ─────────────────────────────────────────────────
 def analyse_audio(wav_path: str) -> dict:
     y, sr = librosa.load(wav_path, sr=44100, mono=True)
 
-    # ── Key detection ──────────────────────────────────────────
+    # ── Key detection (Krumhansl-Schmuckler) ───────────────────
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     chroma_mean = chroma.mean(axis=1)
 
@@ -161,8 +120,43 @@ def analyse_audio(wav_path: str) -> dict:
     else:
         tempo = float(tempo)
 
-    # ── Chords ─────────────────────────────────────────────────
-    chords = detect_chords(y, sr)
+    # ── Chord detection (Chordino) ─────────────────────────────
+    try:
+        chord_changes = chordino.extract(wav_path)
+        # chord_changes is a list of ChordChange(chord='X', timestamp=0.0)
+        
+        # Build timestamped chord list
+        chord_timestamps = []
+        seen_chords = []
+        unique_chords = []
+        
+        for change in chord_changes:
+            chord_name = change.chord
+            if chord_name == 'N':  # N = no chord / silence
+                continue
+            
+            chord_timestamps.append({
+                "time": round(change.timestamp, 2),
+                "chord": chord_name,
+            })
+            
+            if chord_name not in seen_chords:
+                seen_chords.append(chord_name)
+                unique_chords.append(chord_name)
+
+        # Also build a progression (ordered, with repeats removed if consecutive)
+        progression = []
+        for change in chord_changes:
+            if change.chord != 'N':
+                if not progression or progression[-1] != change.chord:
+                    progression.append(change.chord)
+        
+        chords = progression[:12] if progression else ["Could not detect"]
+        
+    except Exception as e:
+        chords = [f"Detection error: {str(e)[:100]}"]
+        chord_timestamps = []
+        unique_chords = []
 
     # ── Melody ─────────────────────────────────────────────────
     pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
@@ -219,10 +213,13 @@ def analyse_audio(wav_path: str) -> dict:
         sync_label = "Low syncopation (straight)"
 
     # ── Harmonic complexity ────────────────────────────────────
-    chord_count = len(chords)
-    has_extensions = any(c for c in chords if any(x in c for x in ['7', '9', 'maj', 'dim', 'aug', 'sus']))
+    chord_count = len(unique_chords)
+    has_extensions = any(
+        any(x in c for x in ['7', '9', 'maj', 'dim', 'aug', 'sus', '6', '11', '13', 'b5', '#'])
+        for c in unique_chords
+    )
     complexity = min(100, int(
-        (chord_count / 8) * 40 +
+        (min(chord_count, 10) / 10) * 40 +
         (1 if has_extensions else 0) * 30 +
         (min(semitone_range, 24) / 24) * 30
     ))
@@ -244,6 +241,7 @@ def analyse_audio(wav_path: str) -> dict:
         "tempo_bpm": round(tempo, 1),
         "time_signature": "4/4",
         "chords": chords,
+        "chord_timestamps": chord_timestamps,
         "melody_range": melody_range,
         "melody_contour": contour,
         "rhythm_syncopation": sync_label,
@@ -255,7 +253,7 @@ def analyse_audio(wav_path: str) -> dict:
 # ── Endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 def health():
-    return {"status": "ok", "service": "harmonic-taste-profiling-engine"}
+    return {"status": "ok", "service": "harmonic-taste-profiling-engine", "version": "2.0"}
 
 
 @app.post("/analyse/url", response_model=AnalysisResult)
