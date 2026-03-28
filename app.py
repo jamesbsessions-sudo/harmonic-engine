@@ -1,12 +1,14 @@
 """
-Harmonic Taste Profiling Engine — MVP Backend v4
-Demucs stem separation + Chordino chord recognition + bass root correction.
+Harmonic Taste Profiling Engine — MVP Backend v5
+Demucs stem separation + custom chord building from bass roots + harmonic chroma.
+No more Chordino — we build chords from the ground up.
 """
 
 import os
 import uuid
 import tempfile
 import subprocess
+import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -16,7 +18,6 @@ import uvicorn
 
 import librosa
 import numpy as np
-from chord_extractor.extractors import Chordino
 
 app = FastAPI(title="Harmonic Taste Profiling Engine")
 
@@ -31,10 +32,16 @@ app.add_middleware(
 WORK_DIR = Path(tempfile.gettempdir()) / "harmonic-engine"
 WORK_DIR.mkdir(exist_ok=True)
 
-chordino = Chordino(roll_on=1)
 
+# ── Note / interval utilities ─────────────────────────────────────
+NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
 
-# ── Enharmonic spelling ──────────────────────────────────────────
+NOTE_TO_NUM = {
+    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+    'E': 4, 'Fb': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7,
+    'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11, 'Cb': 11,
+}
+
 ENHARMONIC_MAP = {
     'C#': 'Db', 'D#': 'Eb', 'F#': 'Gb', 'G#': 'Ab', 'A#': 'Bb',
 }
@@ -42,65 +49,120 @@ FLAT_KEYS = {'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb',
              'Dm', 'Gm', 'Cm', 'Fm', 'Bbm', 'Ebm'}
 
 
-def normalise_enharmonic(chord_name: str, key: str) -> str:
+def normalise_enharmonic(name: str, key: str) -> str:
     key_root = key.split()[0] if ' ' in key else key
     use_flats = key_root in FLAT_KEYS or 'b' in key_root
     if not use_flats:
-        return chord_name
+        return name
     for sharp, flat in ENHARMONIC_MAP.items():
-        if chord_name.startswith(sharp):
-            return flat + chord_name[len(sharp):]
-    return chord_name
+        if name.startswith(sharp):
+            return flat + name[len(sharp):]
+    return name
+
+
+# ── Chord quality detection from intervals ────────────────────────
+def identify_chord_quality(root_name: str, chroma_frame: np.ndarray, threshold: float = 0.3) -> str:
+    """
+    Given a root note and a 12-bin chroma frame from the harmonic stem,
+    determine the chord quality by checking which intervals are present.
+    
+    Returns the full chord name (e.g. 'Dbmaj7', 'Abm', 'G7').
+    """
+    root_num = NOTE_TO_NUM.get(root_name, 0)
+    
+    # Normalise chroma frame
+    if chroma_frame.max() > 0:
+        chroma_norm = chroma_frame / chroma_frame.max()
+    else:
+        return root_name  # Can't determine quality, just return root
+    
+    # Check presence of each interval relative to root
+    def has_interval(semitones):
+        idx = (root_num + semitones) % 12
+        return chroma_norm[idx] >= threshold
+    
+    # Interval definitions
+    has_minor_3rd = has_interval(3)    # b3
+    has_major_3rd = has_interval(4)    # 3
+    has_perfect_4th = has_interval(5)  # 4 (sus4)
+    has_dim_5th = has_interval(6)      # b5
+    has_perfect_5th = has_interval(7)  # 5
+    has_minor_6th = has_interval(8)    # b6 / #5
+    has_major_6th = has_interval(9)    # 6
+    has_minor_7th = has_interval(10)   # b7
+    has_major_7th = has_interval(11)   # 7
+    has_9th = has_interval(2)          # 9 (= 2)
+    
+    # ── Match chord qualities (most specific first) ────────────
+    
+    # Diminished: b3 + b5
+    if has_minor_3rd and has_dim_5th and not has_perfect_5th:
+        if has_minor_7th:
+            return root_name + "m7b5"  # half-diminished
+        return root_name + "dim"
+    
+    # Augmented: 3 + #5
+    if has_major_3rd and has_minor_6th and not has_perfect_5th:
+        return root_name + "aug"
+    
+    # Sus4: 4 + 5, no 3rd
+    if has_perfect_4th and not has_major_3rd and not has_minor_3rd:
+        if has_minor_7th:
+            return root_name + "7sus4"
+        return root_name + "sus4"
+    
+    # Major 7th: 3 + 5 + 7
+    if has_major_3rd and has_major_7th:
+        if has_9th:
+            return root_name + "maj9"
+        return root_name + "maj7"
+    
+    # Dominant 7th: 3 + 5 + b7
+    if has_major_3rd and has_minor_7th:
+        if has_9th:
+            return root_name + "9"
+        return root_name + "7"
+    
+    # Minor 7th: b3 + 5 + b7
+    if has_minor_3rd and has_minor_7th:
+        if has_9th:
+            return root_name + "m9"
+        return root_name + "m7"
+    
+    # Minor maj7: b3 + 5 + 7
+    if has_minor_3rd and has_major_7th:
+        return root_name + "mMaj7"
+    
+    # Major 6th: 3 + 5 + 6
+    if has_major_3rd and has_major_6th:
+        return root_name + "6"
+    
+    # Minor 6th: b3 + 5 + 6
+    if has_minor_3rd and has_major_6th:
+        return root_name + "m6"
+    
+    # Plain minor: b3 + 5
+    if has_minor_3rd and has_perfect_5th:
+        return root_name + "m"
+    
+    # Plain major: 3 + 5
+    if has_major_3rd:
+        return root_name + "maj"
+    
+    # Minor (no 5th detected but b3 is there)
+    if has_minor_3rd:
+        return root_name + "m"
+    
+    # Powerchord / can't determine
+    if has_perfect_5th:
+        return root_name + "5"
+    
+    # Fallback — just the root
+    return root_name
 
 
 # ── Demucs stem separation ────────────────────────────────────────
-def separate_stems(wav_path: str, output_dir: str) -> dict:
-    """
-    Run Demucs to separate audio into bass, drums, vocals, other.
-    Returns dict of stem paths.
-    """
-    cmd = [
-        "python", "-m", "demucs",
-        "--two-stems", "bass",  # First pass: isolate bass
-        "-n", "htdemucs",
-        "--out", output_dir,
-        wav_path,
-    ]
-
-    # Try the lighter model first for speed
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-    if result.returncode != 0:
-        # Fall back to even lighter model
-        cmd[5] = "htdemucs_ft"
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Demucs separation failed: {result.stderr[:300]}"
-            )
-
-    # Find the output stems
-    song_name = Path(wav_path).stem
-    stem_dir = Path(output_dir) / "htdemucs" / song_name
-
-    if not stem_dir.exists():
-        # Try alternate model name
-        stem_dir = Path(output_dir) / "htdemucs_ft" / song_name
-
-    stems = {}
-    for stem_name in ["bass", "no_bass"]:
-        stem_path = stem_dir / f"{stem_name}.wav"
-        if stem_path.exists():
-            stems[stem_name] = str(stem_path)
-
-    return stems
-
-
 def separate_full_stems(wav_path: str, output_dir: str) -> dict:
-    """
-    Run Demucs to separate into bass, drums, vocals, other (4 stems).
-    """
     cmd = [
         "python", "-m", "demucs",
         "-n", "htdemucs",
@@ -111,10 +173,7 @@ def separate_full_stems(wav_path: str, output_dir: str) -> dict:
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if result.returncode != 0:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Demucs separation failed: {result.stderr[:300]}"
-        )
+        raise Exception(f"Demucs failed: {result.stderr[:300]}")
 
     song_name = Path(wav_path).stem
     stem_dir = Path(output_dir) / "htdemucs" / song_name
@@ -125,15 +184,14 @@ def separate_full_stems(wav_path: str, output_dir: str) -> dict:
         if stem_path.exists():
             stems[stem_name] = str(stem_path)
 
+    if not stems:
+        raise Exception(f"No stems found in {stem_dir}")
+
     return stems
 
 
 # ── Bass root detection from isolated bass stem ──────────────────
 def detect_bass_roots(bass_path: str, beat_frames, sr=44100):
-    """
-    Detect root notes from the isolated bass stem.
-    Much more accurate than low-pass filtering a full mix.
-    """
     y_bass, sr = librosa.load(bass_path, sr=sr, mono=True)
 
     bass_chroma = librosa.feature.chroma_cqt(
@@ -147,84 +205,77 @@ def detect_bass_roots(bass_path: str, beat_frames, sr=44100):
     else:
         beat_chroma = bass_chroma
 
-    note_names = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
-
     bass_notes = []
     for i in range(beat_chroma.shape[1]):
         frame = beat_chroma[:, i]
         if frame.sum() > 0:
             best_note_idx = frame.argmax()
-            bass_notes.append(note_names[best_note_idx])
+            bass_notes.append(NOTE_NAMES[best_note_idx])
         else:
             bass_notes.append(None)
 
     return bass_notes
 
 
-# ── Chord correction with bass ───────────────────────────────────
-def correct_chord_with_bass(chord_name: str, bass_note: str) -> str:
-    if not bass_note or chord_name == 'N':
-        return chord_name
+# ── Harmonic chroma from "other" stem ─────────────────────────────
+def get_harmonic_chroma(other_path: str, beat_frames, sr=44100):
+    """
+    Get beat-synced chroma from the harmonic (other) stem.
+    Returns a 12 x n_beats array.
+    """
+    y_other, sr = librosa.load(other_path, sr=sr, mono=True)
 
-    if len(chord_name) > 1 and chord_name[1] in ('#', 'b'):
-        chord_root = chord_name[:2]
-        chord_quality = chord_name[2:]
+    chroma = librosa.feature.chroma_cqt(y=y_other, sr=sr)
+
+    if len(beat_frames) > 1:
+        beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
     else:
-        chord_root = chord_name[0]
-        chord_quality = chord_name[1:]
+        beat_chroma = chroma
 
-    enharmonic_equiv = {
-        'C#': 'Db', 'Db': 'C#', 'D#': 'Eb', 'Eb': 'D#',
-        'F#': 'Gb', 'Gb': 'F#', 'G#': 'Ab', 'Ab': 'G#',
-        'A#': 'Bb', 'Bb': 'A#',
-    }
-
-    roots_match = (
-        chord_root == bass_note or
-        enharmonic_equiv.get(chord_root) == bass_note
-    )
-
-    if roots_match:
-        return chord_name
-
-    note_to_num = {
-        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
-        'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
-        'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
-    }
-
-    chord_num = note_to_num.get(chord_root, -1)
-    bass_num = note_to_num.get(bass_note, -1)
-
-    if chord_num == -1 or bass_num == -1:
-        return chord_name
-
-    interval = (chord_num - bass_num) % 12
-
-    # 3rd (3-4 semitones), 5th (7 semitones), or 6th (8-9) = likely inversion
-    if interval in (3, 4, 7, 8, 9):
-        return bass_note + chord_quality
-
-    return chord_name
+    return beat_chroma
 
 
-# ── Chord filtering ──────────────────────────────────────────────
-def filter_chord_changes(chord_changes, min_duration=0.8):
-    if not chord_changes:
-        return chord_changes
+# ── Build chord progression from bass + harmonic chroma ───────────
+def build_chord_progression(bass_notes, harmonic_chroma, beat_times, key):
+    """
+    Combine bass roots with harmonic chroma to build a chord progression.
+    Bass gives us the root, chroma gives us the quality.
+    """
+    chord_at_beat = []
 
-    filtered = []
-    for i, change in enumerate(chord_changes):
-        if change.chord == 'N':
+    for i, bass_note in enumerate(bass_notes):
+        if bass_note is None:
+            chord_at_beat.append(None)
             continue
-        if i + 1 < len(chord_changes):
-            duration = chord_changes[i + 1].timestamp - change.timestamp
-        else:
-            duration = float('inf')
-        if duration >= min_duration:
-            filtered.append(change)
 
-    return filtered
+        if i < harmonic_chroma.shape[1]:
+            chroma_frame = harmonic_chroma[:, i]
+        else:
+            chroma_frame = np.zeros(12)
+
+        chord_name = identify_chord_quality(bass_note, chroma_frame, threshold=0.3)
+        chord_name = normalise_enharmonic(chord_name, key)
+        chord_at_beat.append(chord_name)
+
+    # ── Build timestamped output ───────────────────────────────
+    # Merge consecutive identical chords into single entries
+    chord_timestamps = []
+    progression = []
+
+    for i, chord in enumerate(chord_at_beat):
+        if chord is None:
+            continue
+
+        time = round(beat_times[i], 2) if i < len(beat_times) else 0.0
+
+        # Only add if different from previous chord
+        if not chord_timestamps or chord_timestamps[-1]["chord"] != chord:
+            chord_timestamps.append({"time": time, "chord": chord})
+
+        if not progression or progression[-1] != chord:
+            progression.append(chord)
+
+    return chord_timestamps, progression
 
 
 # ── Models ────────────────────────────────────────────────────────
@@ -287,7 +338,7 @@ def to_wav(input_path: str, output_path: str) -> str:
 def analyse_audio(wav_path: str, song_id: str) -> dict:
     y, sr = librosa.load(wav_path, sr=44100, mono=True)
 
-    # ── Key detection ──────────────────────────────────────────
+    # ── Key detection (Krumhansl-Schmuckler) ───────────────────
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     chroma_mean = chroma.mean(axis=1)
 
@@ -315,70 +366,66 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     else:
         tempo = float(tempo)
 
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
     # ── Stem separation ────────────────────────────────────────
     stem_dir = str(WORK_DIR / f"{song_id}_stems")
     separation_used = False
-    bass_notes = []
     demucs_error = ""
+    bass_notes = []
+    chord_timestamps = []
+    chords = []
+    unique_chords = []
 
     try:
         stems = separate_full_stems(wav_path, stem_dir)
         separation_used = True
 
-        # ── Bass root detection from isolated bass ─────────────
+        # Bass root detection from isolated bass stem
         if "bass" in stems:
             bass_notes = detect_bass_roots(stems["bass"], beat_frames, sr)
 
-        # ── Chord detection on "other" stem (harmonic instruments)
-        chord_source = stems.get("other", wav_path)
+        # Harmonic chroma from "other" stem
+        if "other" in stems and bass_notes:
+            harmonic_chroma = get_harmonic_chroma(stems["other"], beat_frames, sr)
+            chord_timestamps, chords = build_chord_progression(
+                bass_notes, harmonic_chroma, beat_times, best_key
+            )
+            unique_chords = list(dict.fromkeys(chords))  # preserve order, remove dupes
+
+        if not chords:
+            chords = ["Could not detect"]
 
     except Exception as e:
-        # If Demucs fails (memory/timeout), fall back to full mix
-        chord_source = wav_path
         separation_used = False
         demucs_error = f"Demucs failed: {str(e)[:200]}"
 
-    # ── Chord detection (Chordino) ─────────────────────────────
-    try:
-        chord_changes = chordino.extract(chord_source)
-        chord_changes = filter_chord_changes(chord_changes, min_duration=0.8)
+        # ── Fallback: analyse full mix with basic chroma ───────
+        full_chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        if len(beat_frames) > 1:
+            beat_chroma = librosa.util.sync(full_chroma, beat_frames, aggregate=np.median)
+        else:
+            beat_chroma = full_chroma
 
-        chord_timestamps = []
-        unique_chords = []
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+        # Simple fallback: pick strongest note per beat as root, guess quality
+        for i in range(beat_chroma.shape[1]):
+            frame = beat_chroma[:, i]
+            if frame.sum() > 0:
+                root_idx = frame.argmax()
+                root = NOTE_NAMES[root_idx]
+                chord_name = identify_chord_quality(root, frame, threshold=0.3)
+                chord_name = normalise_enharmonic(chord_name, best_key)
 
-        for change in chord_changes:
-            chord_name = change.chord
-            if chord_name == 'N':
-                continue
+                if not chord_timestamps or chord_timestamps[-1]["chord"] != chord_name:
+                    time = round(beat_times[i], 2) if i < len(beat_times) else 0.0
+                    chord_timestamps.append({"time": time, "chord": chord_name})
 
-            # Bass correction
-            if len(beat_times) > 0 and len(bass_notes) > 0:
-                beat_idx = np.argmin(np.abs(beat_times - change.timestamp))
-                if beat_idx < len(bass_notes) and bass_notes[beat_idx]:
-                    chord_name = correct_chord_with_bass(chord_name, bass_notes[beat_idx])
+                if chord_name not in unique_chords:
+                    unique_chords.append(chord_name)
 
-            chord_name = normalise_enharmonic(chord_name, best_key)
-
-            chord_timestamps.append({
-                "time": round(change.timestamp, 2),
-                "chord": chord_name,
-            })
-
-            if chord_name not in unique_chords:
-                unique_chords.append(chord_name)
-
-        progression = []
-        for entry in chord_timestamps:
-            if not progression or progression[-1] != entry["chord"]:
-                progression.append(entry["chord"])
-
-        chords = progression[:12] if progression else ["Could not detect"]
-
-    except Exception as e:
-        chords = [f"Detection error: {str(e)[:100]}"]
-        chord_timestamps = []
-        unique_chords = []
+        chords = [e["chord"] for e in chord_timestamps][:12]
+        if not chords:
+            chords = ["Could not detect"]
 
     # ── Melody (from vocal stem if available) ──────────────────
     try:
@@ -423,14 +470,13 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
 
     # ── Rhythm ─────────────────────────────────────────────────
     if len(beat_frames) > 1:
-        beat_times_r = librosa.frames_to_time(beat_frames, sr=sr)
         onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
         onset_times = librosa.frames_to_time(onset_frames, sr=sr)
 
         offbeat_count = 0
         for ot in onset_times:
-            for i in range(len(beat_times_r) - 1):
-                mid_point = (beat_times_r[i] + beat_times_r[i + 1]) / 2
+            for i in range(len(beat_times) - 1):
+                mid_point = (beat_times[i] + beat_times[i + 1]) / 2
                 if abs(ot - mid_point) < 0.05:
                     offbeat_count += 1
         syncopation = offbeat_count / max(len(onset_times), 1)
@@ -458,7 +504,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
 
     # ── Swing ──────────────────────────────────────────────────
     if len(beat_frames) > 2:
-        ioi = np.diff(librosa.frames_to_time(beat_frames, sr=sr))
+        ioi = np.diff(beat_times)
         if len(ioi) > 1:
             ratios = ioi[:-1] / ioi[1:]
             swing = float(np.median(ratios))
@@ -468,13 +514,13 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     else:
         swing = 0.5
 
+    # Normalise bass notes for output
     bass_notes_normalised = [
         normalise_enharmonic(n, best_key) if n else "—"
         for n in bass_notes
     ]
 
     # Clean up stems
-    import shutil
     if os.path.exists(stem_dir):
         shutil.rmtree(stem_dir, ignore_errors=True)
 
@@ -482,9 +528,9 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         "key": best_key,
         "tempo_bpm": round(tempo, 1),
         "time_signature": "4/4",
-        "chords": chords,
+        "chords": chords[:12],
         "chord_timestamps": chord_timestamps,
-        "bass_notes_detected": bass_notes_normalised[:16],
+        "bass_notes_detected": bass_notes_normalised[:24],
         "melody_range": melody_range,
         "melody_contour": contour,
         "rhythm_syncopation": sync_label,
@@ -498,7 +544,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
 # ── Endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 def health():
-    return {"status": "ok", "service": "harmonic-taste-profiling-engine", "version": "4.0"}
+    return {"status": "ok", "service": "harmonic-taste-profiling-engine", "version": "5.0"}
 
 
 @app.post("/analyse/url", response_model=AnalysisResult)
