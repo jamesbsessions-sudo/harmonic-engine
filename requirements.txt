@@ -5,4 +5,3 @@ librosa==0.10.2
 numpy==1.26.4
 yt-dlp==2024.8.6
 pydantic==2.9.1
-cython==3.0.10
