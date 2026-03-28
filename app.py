@@ -247,6 +247,7 @@ class AnalysisResult(BaseModel):
     swing_ratio: float
     harmonic_complexity: int
     separation_used: bool
+    demucs_debug: str
     notes: str
 
 
@@ -318,6 +319,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     stem_dir = str(WORK_DIR / f"{song_id}_stems")
     separation_used = False
     bass_notes = []
+    demucs_error = ""
 
     try:
         stems = separate_full_stems(wav_path, stem_dir)
@@ -334,6 +336,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         # If Demucs fails (memory/timeout), fall back to full mix
         chord_source = wav_path
         separation_used = False
+        demucs_error = f"Demucs failed: {str(e)[:200]}"
 
     # ── Chord detection (Chordino) ─────────────────────────────
     try:
@@ -488,6 +491,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         "swing_ratio": swing,
         "harmonic_complexity": complexity,
         "separation_used": separation_used,
+        "demucs_debug": demucs_error,
     }
 
 
