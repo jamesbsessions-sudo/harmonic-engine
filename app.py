@@ -9,36 +9,31 @@ import os
 import uuid
 import tempfile
 import subprocess
-import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-# ── Analysis imports ──────────────────────────────────────────────
 import librosa
 import numpy as np
-import madmom
 
 app = FastAPI(title="Harmonic Taste Profiling Engine")
 
-# Allow your Loveable frontend to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock this down to your Loveable URL in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Temp directory for processing ─────────────────────────────────
 WORK_DIR = Path(tempfile.gettempdir()) / "harmonic-engine"
 WORK_DIR.mkdir(exist_ok=True)
 
 
-# ── Request / Response models ─────────────────────────────────────
+# ── Models ────────────────────────────────────────────────────────
 class AnalyseURLRequest(BaseModel):
     url: str
 
@@ -58,9 +53,8 @@ class AnalysisResult(BaseModel):
     notes: str
 
 
-# ── Helper: download audio from URL ──────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────
 def download_audio(url: str, output_path: str) -> str:
-    """Use yt-dlp to download audio from Instagram/YouTube/etc."""
     cmd = [
         "yt-dlp",
         "--extract-audio",
@@ -72,29 +66,18 @@ def download_audio(url: str, output_path: str) -> str:
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not download audio: {result.stderr[:300]}"
-        )
+        raise HTTPException(status_code=400, detail=f"Download failed: {result.stderr[:300]}")
 
-    # yt-dlp may append .wav to the output path
     for candidate in [output_path, output_path + ".wav"]:
         if os.path.exists(candidate):
             return candidate
-
     raise HTTPException(status_code=500, detail="Download succeeded but file not found")
 
 
-# ── Helper: convert any audio/video to WAV ────────────────────────
 def to_wav(input_path: str, output_path: str) -> str:
-    """Use ffmpeg to normalise to 44.1kHz mono WAV."""
     cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        "-ac", "1",          # mono
-        "-ar", "44100",       # 44.1kHz
-        "-f", "wav",
-        output_path,
+        "ffmpeg", "-y", "-i", input_path,
+        "-ac", "1", "-ar", "44100", "-f", "wav", output_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
@@ -102,13 +85,53 @@ def to_wav(input_path: str, output_path: str) -> str:
     return output_path
 
 
+# ── Chord detection using chroma features ─────────────────────────
+def detect_chords(y, sr):
+    """Simple chord detection using chroma features and template matching."""
+    # Chord templates (major and minor triads)
+    chord_names = [
+        'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B',
+        'Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'Abm', 'Am', 'Bbm', 'Bm'
+    ]
+
+    # Major triad: root, major third, fifth
+    major_template = np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], dtype=float)
+    # Minor triad: root, minor third, fifth
+    minor_template = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0], dtype=float)
+
+    templates = []
+    for i in range(12):
+        templates.append(np.roll(major_template, i))
+    for i in range(12):
+        templates.append(np.roll(minor_template, i))
+    templates = np.array(templates)
+
+    # Get chroma features, segment by beats
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
+
+    # Match each beat to a chord
+    detected = []
+    for i in range(beat_chroma.shape[1]):
+        frame = beat_chroma[:, i]
+        if frame.sum() == 0:
+            continue
+        frame = frame / frame.sum()
+        # Correlate with each template
+        scores = [np.corrcoef(frame, t)[0, 1] for t in templates]
+        best = np.argmax(scores)
+        chord = chord_names[best]
+        if not detected or detected[-1] != chord:
+            detected.append(chord)
+
+    # Return unique chord progression (first 8)
+    return detected[:8] if detected else ["Could not detect"]
+
+
 # ── Core analysis ─────────────────────────────────────────────────
 def analyse_audio(wav_path: str) -> dict:
-    """Run all analysis on a WAV file and return structured results."""
-
-    # Load audio
     y, sr = librosa.load(wav_path, sr=44100, mono=True)
-    duration = librosa.get_duration(y=y, sr=sr)
 
     # ── Key detection ──────────────────────────────────────────
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -131,39 +154,18 @@ def analyse_audio(wav_path: str) -> dict:
             best_corr = min_corr
             best_key = f"{key_names[i]} Minor"
 
-    # ── Tempo detection ────────────────────────────────────────
+    # ── Tempo ──────────────────────────────────────────────────
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
     if hasattr(tempo, '__len__'):
         tempo = float(tempo[0])
     else:
         tempo = float(tempo)
 
-    # ── Chord detection (madmom) ───────────────────────────────
-    try:
-        dcp = madmom.features.chords.DeepChromaProcessor()
-        decode = madmom.features.chords.CRFChordRecognitionProcessor()
-        deep_chroma = dcp(wav_path)
-        chord_result = decode(deep_chroma)
+    # ── Chords ─────────────────────────────────────────────────
+    chords = detect_chords(y, sr)
 
-        # chord_result is list of (start, end, chord_label)
-        seen = []
-        chords = []
-        for start, end, label in chord_result:
-            if label != 'N' and label not in seen:
-                seen.append(label)
-                chords.append(label)
-                if len(chords) >= 8:  # Cap at 8 unique chords
-                    break
-
-        if not chords:
-            chords = ["Could not detect"]
-    except Exception as e:
-        chords = [f"Detection error: {str(e)[:80]}"]
-
-    # ── Melody analysis (pitch tracking) ───────────────────────
+    # ── Melody ─────────────────────────────────────────────────
     pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
-
-    # Get the most prominent pitch per frame
     pitch_values = []
     for t in range(pitches.shape[1]):
         index = magnitudes[:, t].argmax()
@@ -177,9 +179,8 @@ def analyse_audio(wav_path: str) -> dict:
         min_note = librosa.hz_to_note(min_pitch)
         max_note = librosa.hz_to_note(max_pitch)
         semitone_range = int(12 * np.log2(max_pitch / min_pitch)) if min_pitch > 0 else 0
-        melody_range = f"{min_note} – {max_note} ({semitone_range} semitones)"
+        melody_range = f"{min_note} - {max_note} ({semitone_range} semitones)"
 
-        # Simple contour: compare first half avg pitch to second half
         mid = len(pitch_values) // 2
         first_half = np.mean(pitch_values[:mid])
         second_half = np.mean(pitch_values[mid:])
@@ -194,20 +195,17 @@ def analyse_audio(wav_path: str) -> dict:
         contour = "Unknown"
         semitone_range = 0
 
-    # ── Rhythm analysis ────────────────────────────────────────
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    # Simple syncopation: how much onset energy falls on off-beats
+    # ── Rhythm ─────────────────────────────────────────────────
     if len(beat_frames) > 1:
         beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-        onset_times = librosa.frames_to_time(
-            librosa.onset.onset_detect(y=y, sr=sr), sr=sr
-        )
-        # Count onsets that fall between beats (off-beat)
+        onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+        onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+
         offbeat_count = 0
         for ot in onset_times:
             for i in range(len(beat_times) - 1):
-                mid = (beat_times[i] + beat_times[i + 1]) / 2
-                if abs(ot - mid) < 0.05:
+                mid_point = (beat_times[i] + beat_times[i + 1]) / 2
+                if abs(ot - mid_point) < 0.05:
                     offbeat_count += 1
         syncopation = offbeat_count / max(len(onset_times), 1)
     else:
@@ -220,8 +218,7 @@ def analyse_audio(wav_path: str) -> dict:
     else:
         sync_label = "Low syncopation (straight)"
 
-    # ── Harmonic complexity score ──────────────────────────────
-    # Based on: number of unique chords, presence of extensions, pitch range
+    # ── Harmonic complexity ────────────────────────────────────
     chord_count = len(chords)
     has_extensions = any(c for c in chords if any(x in c for x in ['7', '9', 'maj', 'dim', 'aug', 'sus']))
     complexity = min(100, int(
@@ -230,12 +227,10 @@ def analyse_audio(wav_path: str) -> dict:
         (min(semitone_range, 24) / 24) * 30
     ))
 
-    # ── Swing estimate ─────────────────────────────────────────
-    # Rough heuristic from inter-onset intervals
+    # ── Swing ──────────────────────────────────────────────────
     if len(beat_frames) > 2:
         ioi = np.diff(librosa.frames_to_time(beat_frames, sr=sr))
         if len(ioi) > 1:
-            # Ratio of consecutive IOIs gives swing feel
             ratios = ioi[:-1] / ioi[1:]
             swing = float(np.median(ratios))
             swing = round(min(max(swing, 0.5), 0.75), 2)
@@ -247,7 +242,7 @@ def analyse_audio(wav_path: str) -> dict:
     return {
         "key": best_key,
         "tempo_bpm": round(tempo, 1),
-        "time_signature": "4/4",  # Hardcoded for MVP — time sig detection is complex
+        "time_signature": "4/4",
         "chords": chords,
         "melody_range": melody_range,
         "melody_contour": contour,
@@ -257,7 +252,7 @@ def analyse_audio(wav_path: str) -> dict:
     }
 
 
-# ── API endpoints ─────────────────────────────────────────────────
+# ── Endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 def health():
     return {"status": "ok", "service": "harmonic-taste-profiling-engine"}
@@ -265,58 +260,33 @@ def health():
 
 @app.post("/analyse/url", response_model=AnalysisResult)
 def analyse_url(req: AnalyseURLRequest):
-    """Analyse audio from a URL (Instagram, YouTube, etc.)."""
     song_id = str(uuid.uuid4())[:8]
     raw_path = str(WORK_DIR / f"{song_id}_raw")
     wav_path = str(WORK_DIR / f"{song_id}.wav")
 
     try:
-        # Step 1: Download
         downloaded = download_audio(req.url, raw_path)
-
-        # Step 2: Convert to WAV
         to_wav(downloaded, wav_path)
-
-        # Step 3: Analyse
         results = analyse_audio(wav_path)
-
-        return AnalysisResult(
-            song_id=song_id,
-            source="url",
-            notes="Analysis complete",
-            **results,
-        )
+        return AnalysisResult(song_id=song_id, source="url", notes="Analysis complete", **results)
     finally:
-        # Clean up temp files
         for f in WORK_DIR.glob(f"{song_id}*"):
             f.unlink(missing_ok=True)
 
 
 @app.post("/analyse/upload", response_model=AnalysisResult)
 async def analyse_upload(file: UploadFile = File(...)):
-    """Analyse an uploaded audio or video file."""
     song_id = str(uuid.uuid4())[:8]
     upload_path = str(WORK_DIR / f"{song_id}_upload{Path(file.filename).suffix}")
     wav_path = str(WORK_DIR / f"{song_id}.wav")
 
     try:
-        # Step 1: Save upload
         with open(upload_path, "wb") as f:
             content = await file.read()
             f.write(content)
-
-        # Step 2: Convert to WAV
         to_wav(upload_path, wav_path)
-
-        # Step 3: Analyse
         results = analyse_audio(wav_path)
-
-        return AnalysisResult(
-            song_id=song_id,
-            source="upload",
-            notes="Analysis complete",
-            **results,
-        )
+        return AnalysisResult(song_id=song_id, source="upload", notes="Analysis complete", **results)
     finally:
         for f in WORK_DIR.glob(f"{song_id}*"):
             f.unlink(missing_ok=True)
