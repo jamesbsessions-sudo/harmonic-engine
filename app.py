@@ -400,6 +400,7 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
     if not bass_notes:
         return [], []
 
+    # ── Step 1: Group consecutive beats by bass root ───────────
     groups = []
     current_root = bass_notes[0]
     current_start = 0
@@ -412,18 +413,54 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
             current_start = i
     groups.append((current_root, current_start, len(bass_notes) - 1))
 
+    # ── Step 2: Remove ghost groups (single-beat blips) ────────
+    # If a group is 1 beat and the groups before and after have the same root,
+    # it's a misread — absorb it into the surrounding group
+    cleaned_groups = []
+    for i, (root, start, end) in enumerate(groups):
+        duration = end - start + 1
+
+        if duration <= 1 and i > 0 and i < len(groups) - 1:
+            prev_root = groups[i - 1][0]
+            next_root = groups[i + 1][0]
+            if prev_root == next_root:
+                continue  # Ghost — skip it
+
+        cleaned_groups.append((root, start, end))
+
+    # Re-merge consecutive groups with same root after ghost removal
+    merged_groups = []
+    for root, start, end in cleaned_groups:
+        if merged_groups and merged_groups[-1][0] == root:
+            prev_root, prev_start, prev_end = merged_groups[-1]
+            merged_groups[-1] = (prev_root, prev_start, end)
+        else:
+            merged_groups.append((root, start, end))
+
+    # ── Step 3: Detect intro artefacts ─────────────────────────
+    # Count which roots appear most in the song (by beat count)
+    root_beat_counts = {}
+    for root, start, end in merged_groups:
+        if root:
+            root_beat_counts[root] = root_beat_counts.get(root, 0) + (end - start + 1)
+
+    total_beats = sum(root_beat_counts.values())
+    # A root is "common" if it accounts for at least 5% of beats
+    common_roots = {r for r, c in root_beat_counts.items() if c >= total_beats * 0.05}
+
+    # ── Step 4: Build chords from groups ───────────────────────
     chord_timestamps = []
     progression = []
 
-    for group_idx, (root, start, end) in enumerate(groups):
+    for group_idx, (root, start, end) in enumerate(merged_groups):
         if root is None:
             continue
 
-        duration_beats = end - start + 1
+        time = round(beat_times[start], 2) if start < len(beat_times) else 0.0
 
-        # Only skip single-beat groups if they're the very first group
-        # (intro artefact). Mid-song single-beat chords are valid (e.g. half-bar chords)
-        if duration_beats <= 1 and group_idx == 0:
+        # Skip intro artefacts: groups in the first 3 seconds whose root
+        # doesn't appear meaningfully elsewhere in the song
+        if time < 3.0 and root not in common_roots:
             continue
 
         chroma_frames = []
@@ -447,33 +484,22 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
         chord_name = identify_chord_quality(root, combined, base_threshold=0.3)
         chord_name = normalise_enharmonic(chord_name, key)
 
-        time = round(beat_times[start], 2) if start < len(beat_times) else 0.0
-
         if not chord_timestamps or chord_timestamps[-1]["chord"] != chord_name:
             chord_timestamps.append({"time": time, "chord": chord_name})
 
         if not progression or progression[-1] != chord_name:
             progression.append(chord_name)
 
-    # Filter short chords — but only at the very start and end (artefacts)
-    # Mid-song short chords are kept because they might be real half-bar changes
+    # ── Step 5: Remove trailing artefacts ──────────────────────
     if len(chord_timestamps) > 2:
-        filtered = []
-        for i, entry in enumerate(chord_timestamps):
-            if i + 1 < len(chord_timestamps):
-                duration = chord_timestamps[i + 1]["time"] - entry["time"]
-            else:
-                duration = float('inf')
+        last_root = chord_timestamps[-1]["chord"]
+        if len(last_root) > 1 and last_root[1] in ('#', 'b'):
+            last_root_name = last_root[:2]
+        else:
+            last_root_name = last_root[0]
 
-            # Only filter if it's the first or last chord AND very short
-            is_edge = (i == 0 or i == len(chord_timestamps) - 1)
-            if is_edge and duration < 0.8:
-                continue  # Skip artefact
-            else:
-                filtered.append(entry)
-
-        if filtered:
-            chord_timestamps = filtered
+        if last_root_name not in common_roots:
+            chord_timestamps = chord_timestamps[:-1]
             progression = [e["chord"] for e in chord_timestamps]
 
     return chord_timestamps, progression
