@@ -415,7 +415,20 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
 
     # ── Step 2: Remove ghost groups (single-beat blips) ────────
     # If a group is 1 beat and the groups before and after have the same root,
-    # it's a misread — absorb it into the surrounding group
+    # ── Step 2: Calculate common roots (needed for ghost detection) ──
+    root_beat_counts = {}
+    for root, start, end in groups:
+        if root:
+            root_beat_counts[root] = root_beat_counts.get(root, 0) + (end - start + 1)
+
+    total_beats = sum(root_beat_counts.values())
+    common_roots = {r for r, c in root_beat_counts.items() if c >= total_beats * 0.05}
+
+    # ── Step 3: Remove ghost groups (single-beat blips) ────────
+    # A ghost is a single-beat group where:
+    # a) The groups before and after have the same root (obvious misread), OR
+    # b) The groups before and after both have common roots AND this root is uncommon
+    #    (passing note between two real chords)
     cleaned_groups = []
     for i, (root, start, end) in enumerate(groups):
         duration = end - start + 1
@@ -423,8 +436,14 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
         if duration <= 1 and i > 0 and i < len(groups) - 1:
             prev_root = groups[i - 1][0]
             next_root = groups[i + 1][0]
+
+            # Case a: same root on both sides
             if prev_root == next_root:
-                continue  # Ghost — skip it
+                continue
+
+            # Case b: both neighbours are common roots but this one isn't
+            if prev_root in common_roots and next_root in common_roots and root not in common_roots:
+                continue
 
         cleaned_groups.append((root, start, end))
 
@@ -437,18 +456,7 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
         else:
             merged_groups.append((root, start, end))
 
-    # ── Step 3: Detect intro artefacts ─────────────────────────
-    # Count which roots appear most in the song (by beat count)
-    root_beat_counts = {}
-    for root, start, end in merged_groups:
-        if root:
-            root_beat_counts[root] = root_beat_counts.get(root, 0) + (end - start + 1)
-
-    total_beats = sum(root_beat_counts.values())
-    # A root is "common" if it accounts for at least 5% of beats
-    common_roots = {r for r, c in root_beat_counts.items() if c >= total_beats * 0.05}
-
-    # ── Step 4: Build chords from groups ───────────────────────
+    # ── Step 4: Detect intro artefacts ─────────────────────────
     chord_timestamps = []
     progression = []
 
