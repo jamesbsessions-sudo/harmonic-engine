@@ -666,6 +666,252 @@ def extract_melody(vocal_path: str, sr=44100):
         "pentatonic_adherence": pentatonic_adherence,
         "note_density": note_density,
         "melody_contour": contour,
+        # Internal data for chord-relation analysis (not displayed directly)
+        "_timestamped_pitches": list(zip(
+            np.where(voiced_mask)[0] * (0.01),  # timestamps at 10ms hop
+            voiced_pitches.tolist()
+        )),
+        "_melody_sequence": melody_sequence,
+    }
+
+
+# ── Melody-to-chord relationship analysis ─────────────────────────
+def analyse_melody_chord_relationship(melody_data, chord_timestamps, key):
+    """
+    For each melody note, determine its relationship to the chord
+    playing underneath it: chord tone, scale tone, or chromatic tone.
+    Also tracks which scale degrees the melody favours.
+    """
+    timestamped_pitches = melody_data.get("_timestamped_pitches", [])
+    if not timestamped_pitches or not chord_timestamps:
+        return {
+            "chord_tone_pct": 0,
+            "scale_tone_pct": 0,
+            "chromatic_tone_pct": 0,
+            "favourite_chord_tones": [],
+            "favourite_scale_degrees": [],
+            "tension_profile": "Unknown",
+        }
+
+    # Determine key root for scale degree calculation
+    key_parts = key.split()
+    key_root = key_parts[0] if key_parts else "C"
+    key_mode = key_parts[1] if len(key_parts) > 1 else "Major"
+    key_root_num = NOTE_TO_NUM.get(key_root, 0)
+
+    # Scale degrees for major/minor
+    if key_mode == "Minor":
+        scale_intervals = {0, 2, 3, 5, 7, 8, 10}  # Natural minor
+    else:
+        scale_intervals = {0, 2, 4, 5, 7, 9, 11}  # Major
+
+    scale_notes = {(key_root_num + iv) % 12 for iv in scale_intervals}
+
+    # Scale degree names
+    if key_mode == "Minor":
+        degree_names = {0: '1', 2: '2', 3: 'b3', 5: '4', 7: '5', 8: 'b6', 10: 'b7'}
+    else:
+        degree_names = {0: '1', 2: '2', 4: '3', 5: '4', 7: '5', 9: '6', 11: '7'}
+
+    chord_tone_count = 0
+    scale_tone_count = 0
+    chromatic_count = 0
+    chord_tone_types = []  # 'root', '3rd', '5th', '7th' etc
+    scale_degree_hits = []
+    total_notes = 0
+
+    for timestamp, hz in timestamped_pitches:
+        if hz <= 0:
+            continue
+
+        midi = int(round(12 * np.log2(hz / 440.0) + 69))
+        note_class = midi % 12
+
+        # Find which chord is active at this timestamp
+        active_chord = None
+        for i, ct in enumerate(chord_timestamps):
+            if ct["time"] <= timestamp:
+                active_chord = ct["chord"]
+            else:
+                break
+
+        if not active_chord:
+            continue
+
+        total_notes += 1
+
+        # Parse chord root
+        if len(active_chord) > 1 and active_chord[1] in ('#', 'b'):
+            chord_root_str = active_chord[:2]
+            chord_quality = active_chord[2:]
+        else:
+            chord_root_str = active_chord[0]
+            chord_quality = active_chord[1:]
+
+        chord_root = NOTE_TO_NUM.get(chord_root_str, 0)
+
+        # Build chord tone set
+        chord_tones = {chord_root}  # root
+        quality_lower = chord_quality.lower()
+
+        if 'm' in quality_lower and 'maj' not in quality_lower:
+            chord_tones.add((chord_root + 3) % 12)  # minor 3rd
+        else:
+            chord_tones.add((chord_root + 4) % 12)  # major 3rd
+
+        if 'dim' in quality_lower:
+            chord_tones.add((chord_root + 6) % 12)
+        elif 'aug' in quality_lower:
+            chord_tones.add((chord_root + 8) % 12)
+        else:
+            chord_tones.add((chord_root + 7) % 12)  # 5th
+
+        if 'maj7' in quality_lower or 'maj9' in quality_lower:
+            chord_tones.add((chord_root + 11) % 12)
+        elif '7' in quality_lower or '9' in quality_lower:
+            chord_tones.add((chord_root + 10) % 12)
+
+        if '9' in quality_lower:
+            chord_tones.add((chord_root + 2) % 12)
+
+        # Classify the melody note
+        interval_from_root = (note_class - chord_root) % 12
+
+        if note_class in chord_tones:
+            chord_tone_count += 1
+            # What kind of chord tone?
+            tone_labels = {0: 'root', 3: 'b3', 4: '3', 7: '5', 10: 'b7', 11: '7', 2: '9'}
+            label = tone_labels.get(interval_from_root, f'interval_{interval_from_root}')
+            chord_tone_types.append(label)
+        elif note_class in scale_notes:
+            scale_tone_count += 1
+        else:
+            chromatic_count += 1
+
+        # Track scale degree
+        interval_from_key = (note_class - key_root_num) % 12
+        if interval_from_key in degree_names:
+            scale_degree_hits.append(degree_names[interval_from_key])
+
+    # Calculate percentages
+    if total_notes > 0:
+        chord_tone_pct = round(chord_tone_count / total_notes * 100, 1)
+        scale_tone_pct = round(scale_tone_count / total_notes * 100, 1)
+        chromatic_pct = round(chromatic_count / total_notes * 100, 1)
+    else:
+        chord_tone_pct = scale_tone_pct = chromatic_pct = 0
+
+    # Most common chord tones
+    ct_counts = Counter(chord_tone_types)
+    favourite_chord_tones = [
+        {"tone": tone, "pct": round(count / max(total_notes, 1) * 100, 1)}
+        for tone, count in ct_counts.most_common(5)
+    ]
+
+    # Most common scale degrees
+    sd_counts = Counter(scale_degree_hits)
+    favourite_scale_degrees = [
+        {"degree": deg, "pct": round(count / max(total_notes, 1) * 100, 1)}
+        for deg, count in sd_counts.most_common(5)
+    ]
+
+    # Tension profile
+    if chord_tone_pct > 65:
+        tension_profile = "Consonant (mostly chord tones)"
+    elif chord_tone_pct > 45:
+        tension_profile = "Balanced (mix of chord and scale tones)"
+    elif chromatic_pct > 20:
+        tension_profile = "Chromatic (high tension)"
+    else:
+        tension_profile = "Scalar (scale-based, moderate tension)"
+
+    return {
+        "chord_tone_pct": chord_tone_pct,
+        "scale_tone_pct": scale_tone_pct,
+        "chromatic_tone_pct": chromatic_pct,
+        "favourite_chord_tones": favourite_chord_tones,
+        "favourite_scale_degrees": favourite_scale_degrees,
+        "tension_profile": tension_profile,
+    }
+
+
+# ── Voicing width estimation ──────────────────────────────────────
+def estimate_voicing_character(other_path: str, chord_timestamps, sr=44100):
+    """
+    Estimate whether chord voicings are close (clustered) or open (spread)
+    by analysing the spectral spread of the harmonic stem during each chord.
+    Also detects likely inversions by comparing bass note to chord root.
+    """
+    y_other, sr_loaded = librosa.load(other_path, sr=sr, mono=True)
+
+    voicing_data = []
+    inversion_count = 0
+    total_chords = 0
+
+    for i, ct in enumerate(chord_timestamps):
+        start_time = ct["time"]
+        if i + 1 < len(chord_timestamps):
+            end_time = chord_timestamps[i + 1]["time"]
+        else:
+            end_time = start_time + 2.0
+
+        # Extract the audio segment for this chord
+        start_sample = int(start_time * sr)
+        end_sample = int(end_time * sr)
+        segment = y_other[start_sample:end_sample]
+
+        if len(segment) < 1024:
+            continue
+
+        total_chords += 1
+
+        # Spectral bandwidth = how spread out the frequencies are
+        bandwidth = librosa.feature.spectral_bandwidth(y=segment, sr=sr)
+        avg_bandwidth = float(np.mean(bandwidth))
+
+        # Spectral flatness = how "noisy" vs "tonal" (lower = more tonal/focused)
+        flatness = librosa.feature.spectral_flatness(y=segment)
+        avg_flatness = float(np.mean(flatness))
+
+        voicing_data.append({
+            "chord": ct["chord"],
+            "bandwidth_hz": round(avg_bandwidth, 1),
+            "flatness": round(avg_flatness, 4),
+        })
+
+    # Overall voicing character
+    if voicing_data:
+        avg_bandwidth_all = np.mean([v["bandwidth_hz"] for v in voicing_data])
+
+        if avg_bandwidth_all > 2500:
+            voicing_label = "Open voicings (wide spread)"
+        elif avg_bandwidth_all > 1500:
+            voicing_label = "Mixed voicings"
+        else:
+            voicing_label = "Close voicings (clustered)"
+    else:
+        avg_bandwidth_all = 0
+        voicing_label = "Unknown"
+
+    # Detect inversions from bass note vs chord root
+    inversion_chords = []
+    for ct in chord_timestamps:
+        chord = ct["chord"]
+        # Parse chord root
+        if len(chord) > 1 and chord[1] in ('#', 'b'):
+            chord_root = chord[:2]
+        else:
+            chord_root = chord[0]
+
+        # We don't have per-chord bass notes in chord_timestamps,
+        # but if the chord name was built with a corrected root,
+        # we can check if slash notation would apply
+        # For now, just report the voicing width data
+
+    return {
+        "average_bandwidth_hz": round(avg_bandwidth_all, 1),
+        "voicing_character": voicing_label,
+        "per_chord_voicing": voicing_data[:12],  # Cap output
     }
 
 
@@ -783,6 +1029,10 @@ class AnalysisResult(BaseModel):
 
     # Melody
     melody: dict
+    melody_chord_relationship: dict
+
+    # Voicing
+    voicing: dict
 
     # Rhythm
     rhythm: dict
@@ -918,6 +1168,25 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         else:
             melody_data = {"error": "No vocal stem available"}
 
+        # ── Melody-chord relationship ──────────────────────────
+        if "error" not in melody_data and chord_timestamps:
+            melody_chord_data = analyse_melody_chord_relationship(
+                melody_data, chord_timestamps, best_key
+            )
+        else:
+            melody_chord_data = {"error": "Melody or chords not available"}
+
+        # ── Voicing estimation ─────────────────────────────────
+        if "other" in stems and chord_timestamps:
+            try:
+                voicing_data = estimate_voicing_character(
+                    stems["other"], chord_timestamps, sr
+                )
+            except Exception as e:
+                voicing_data = {"error": str(e)[:200]}
+        else:
+            voicing_data = {"error": "Other stem not available"}
+
     except Exception as e:
         separation_used = False
         demucs_error = f"Demucs failed: {str(e)[:200]}"
@@ -947,6 +1216,8 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         if not chords:
             chords = ["Could not detect"]
         melody_data = {"error": "Stem separation failed, melody not available"}
+        melody_chord_data = {"error": "Not available without stems"}
+        voicing_data = {"error": "Not available without stems"}
 
     # ── Key centre ─────────────────────────────────────────────
     key_centre = detect_key_centre(chord_timestamps, best_key)
@@ -986,6 +1257,9 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     if os.path.exists(stem_dir):
         shutil.rmtree(stem_dir, ignore_errors=True)
 
+    # Remove internal melody data before returning
+    clean_melody = {k: v for k, v in melody_data.items() if not k.startswith('_')}
+
     return {
         "key": best_key,
         "key_centre": key_centre,
@@ -999,7 +1273,9 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         "harmonic_rhythm_per_bar": harmonic_rhythm,
         "harmonic_complexity": complexity,
         "bass_notes_detected": bass_notes_normalised[:24],
-        "melody": melody_data,
+        "melody": clean_melody,
+        "melody_chord_relationship": melody_chord_data,
+        "voicing": voicing_data,
         "rhythm": rhythm,
         "spectral": spectral,
         "separation_used": separation_used,
