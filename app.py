@@ -415,12 +415,15 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
     chord_timestamps = []
     progression = []
 
-    for root, start, end in groups:
+    for group_idx, (root, start, end) in enumerate(groups):
         if root is None:
             continue
 
         duration_beats = end - start + 1
-        if duration_beats <= 1 and start == 0:
+
+        # Only skip single-beat groups if they're the very first group
+        # (intro artefact). Mid-song single-beat chords are valid (e.g. half-bar chords)
+        if duration_beats <= 1 and group_idx == 0:
             continue
 
         chroma_frames = []
@@ -452,18 +455,26 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
         if not progression or progression[-1] != chord_name:
             progression.append(chord_name)
 
-    # Filter short chords
-    if len(chord_timestamps) > 1:
+    # Filter short chords — but only at the very start and end (artefacts)
+    # Mid-song short chords are kept because they might be real half-bar changes
+    if len(chord_timestamps) > 2:
         filtered = []
         for i, entry in enumerate(chord_timestamps):
             if i + 1 < len(chord_timestamps):
                 duration = chord_timestamps[i + 1]["time"] - entry["time"]
             else:
                 duration = float('inf')
-            if duration >= 1.0 or i == len(chord_timestamps) - 1:
+
+            # Only filter if it's the first or last chord AND very short
+            is_edge = (i == 0 or i == len(chord_timestamps) - 1)
+            if is_edge and duration < 0.8:
+                continue  # Skip artefact
+            else:
                 filtered.append(entry)
-        chord_timestamps = filtered
-        progression = [e["chord"] for e in chord_timestamps]
+
+        if filtered:
+            chord_timestamps = filtered
+            progression = [e["chord"] for e in chord_timestamps]
 
     return chord_timestamps, progression
 
@@ -472,25 +483,31 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
 def detect_time_signature(y, sr, tempo):
     """
     Detect whether the music is in 3-feel (3/4, 6/8) or 4-feel (4/4).
-    Uses beat strength patterns — in 3-feel, every 3rd beat is strong;
-    in 4-feel, every 4th beat (with emphasis on 1 and 3).
+    Uses multiple heuristics:
+    1. Beat strength patterns (strong beats every 3 vs 4)
+    2. Tempo sanity check (if detected tempo is very high, likely doubled)
+    3. Autocorrelation of onset envelope for periodicity
+    
+    Returns (time_sig_string, beats_per_bar, corrected_tempo)
     """
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     tempo_val, beats = librosa.beat.beat_track(y=y, sr=sr, onset_envelope=onset_env)
 
     if len(beats) < 6:
-        return "4/4", 4
+        return "4/4", 4, tempo
 
     # Get onset strength at each beat
-    beat_strengths = onset_env[beats] if max(beats) < len(onset_env) else []
-
+    beat_strengths = []
+    for b in beats:
+        if b < len(onset_env):
+            beat_strengths.append(onset_env[b])
+    
     if len(beat_strengths) < 6:
-        return "4/4", 4
+        return "4/4", 4, tempo
 
-    # Test grouping in 3s vs 4s
-    # In 3-feel: beats 0, 3, 6, 9... are strong (every 3rd)
-    # In 4-feel: beats 0, 4, 8, 12... are strong (every 4th)
+    beat_strengths = np.array(beat_strengths)
 
+    # ── Method 1: Beat strength grouping ───────────────────────
     score_3 = 0
     score_4 = 0
 
@@ -498,16 +515,15 @@ def detect_time_signature(y, sr, tempo):
         if i % 3 == 0:
             score_3 += strength
         else:
-            score_3 -= strength * 0.3
+            score_3 -= strength * 0.2
 
         if i % 4 == 0:
             score_4 += strength
         elif i % 4 == 2:
-            score_4 += strength * 0.5  # Beat 3 in 4/4 is also strong
+            score_4 += strength * 0.5
         else:
-            score_4 -= strength * 0.3
+            score_4 -= strength * 0.2
 
-    # Normalise by number of groups
     n_groups_3 = len(beat_strengths) / 3
     n_groups_4 = len(beat_strengths) / 4
 
@@ -516,13 +532,52 @@ def detect_time_signature(y, sr, tempo):
     if n_groups_4 > 0:
         score_4 /= n_groups_4
 
-    if score_3 > score_4 * 1.15:  # Need clear advantage for 3-feel
-        # Determine if it's 3/4 or 6/8 based on tempo
-        if tempo > 140:
-            return "6/8", 6
-        return "3/4", 3
+    # ── Method 2: Tempo range heuristic ────────────────────────
+    # If tempo > 150, it's likely the beat tracker doubled the tempo
+    # Common 6/8 songs have a "real" tempo of 60-120 but tracker reads 120-240
+    tempo_suggests_double = tempo > 150
+
+    # ── Method 3: Check if grouping in 3s produces more regular accents
+    # Calculate variance of accent strengths when grouped by 3 vs 4
+    if len(beat_strengths) >= 12:
+        # Group by 3: take every 3rd beat's strength
+        accents_3 = beat_strengths[::3]
+        non_accents_3 = np.concatenate([beat_strengths[1::3], beat_strengths[2::3]])
+        contrast_3 = np.mean(accents_3) - np.mean(non_accents_3) if len(non_accents_3) > 0 else 0
+
+        # Group by 4: take every 4th beat's strength
+        accents_4 = beat_strengths[::4]
+        non_accents_4 = np.concatenate([beat_strengths[1::4], beat_strengths[2::4], beat_strengths[3::4]])
+        contrast_4 = np.mean(accents_4) - np.mean(non_accents_4) if len(non_accents_4) > 0 else 0
     else:
-        return "4/4", 4
+        contrast_3 = 0
+        contrast_4 = 0
+
+    # ── Decision ───────────────────────────────────────────────
+    three_feel_evidence = 0
+
+    if score_3 > score_4:
+        three_feel_evidence += 1
+    if tempo_suggests_double:
+        three_feel_evidence += 1
+    if contrast_3 > contrast_4:
+        three_feel_evidence += 1
+
+    if three_feel_evidence >= 2:
+        # It's a 3-feel — correct the tempo
+        corrected_tempo = tempo / 2 if tempo > 150 else tempo
+        if corrected_tempo > 100:
+            return "6/8", 6, corrected_tempo
+        else:
+            return "3/4", 3, corrected_tempo
+    else:
+        # Check if tempo is suspiciously high even for 4/4
+        if tempo > 160:
+            # Might be doubled — check if half tempo makes more sense
+            half = tempo / 2
+            if 60 <= half <= 140:
+                return "4/4", 4, half
+        return "4/4", 4, tempo
 
 
 # ── Half-time / double-time detection ─────────────────────────────
@@ -1202,7 +1257,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
 
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
-    time_sig, beats_per_bar = detect_time_signature(y, sr, tempo)
+    time_sig, beats_per_bar, tempo = detect_time_signature(y, sr, tempo)
 
     # ── Stem separation ────────────────────────────────────────
     stem_dir = str(WORK_DIR / f"{song_id}_stems")
