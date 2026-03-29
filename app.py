@@ -1255,9 +1255,18 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
     else:
         tempo = float(tempo)
 
-    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-
+    original_tempo = tempo
     time_sig, beats_per_bar, tempo = detect_time_signature(y, sr, tempo)
+
+    # If the tempo was corrected (halved), thin out the beat grid to match
+    # Take every Nth beat where N = ratio of original to corrected tempo
+    if original_tempo > tempo * 1.3:  # Tempo was significantly reduced
+        tempo_ratio = round(original_tempo / tempo)
+        if tempo_ratio >= 2:
+            # Take every Nth beat frame to match the corrected tempo
+            beat_frames = beat_frames[::tempo_ratio]
+
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
     # ── Stem separation ────────────────────────────────────────
     stem_dir = str(WORK_DIR / f"{song_id}_stems")
