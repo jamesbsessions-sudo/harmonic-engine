@@ -217,27 +217,116 @@ def chord_label_to_notes(label: str) -> set:
 
 # ── Demucs stem separation ────────────────────────────────────────
 def separate_full_stems(wav_path: str, output_dir: str) -> dict:
-    cmd = [
+    """
+    Ensemble stem separation: run htdemucs_ft and mdx_extra sequentially,
+    then average their outputs for more consistent, accurate stems.
+    Falls back to single htdemucs if ensemble fails.
+    """
+    import soundfile as sf
+
+    song_name = Path(wav_path).stem
+    stem_names = ["bass", "drums", "vocals", "other"]
+
+    # ── Run model 1: htdemucs_ft (fine-tuned, best overall) ────
+    cmd1 = [
         "python", "-m", "demucs",
-        "-n", "htdemucs",
+        "-n", "htdemucs_ft",
+        "--shifts", "1",
         "--out", output_dir,
         wav_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise Exception(f"Demucs failed: {result.stderr[:300]}")
+    result1 = subprocess.run(cmd1, capture_output=True, text=True, timeout=600)
+    model1_ok = result1.returncode == 0
+    model1_dir = Path(output_dir) / "htdemucs_ft" / song_name
 
-    song_name = Path(wav_path).stem
-    stem_dir = Path(output_dir) / "htdemucs" / song_name
+    # ── Run model 2: mdx_extra (different architecture) ────────
+    cmd2 = [
+        "python", "-m", "demucs",
+        "-n", "mdx_extra",
+        "--shifts", "1",
+        "--out", output_dir,
+        wav_path,
+    ]
+    result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=600)
+    model2_ok = result2.returncode == 0
+    model2_dir = Path(output_dir) / "mdx_extra" / song_name
 
+    # ── Average the stems if both models succeeded ─────────────
+    if model1_ok and model2_ok and model1_dir.exists() and model2_dir.exists():
+        ensemble_dir = Path(output_dir) / "ensemble" / song_name
+        ensemble_dir.mkdir(parents=True, exist_ok=True)
+
+        stems = {}
+        for stem_name in stem_names:
+            path1 = model1_dir / f"{stem_name}.wav"
+            path2 = model2_dir / f"{stem_name}.wav"
+
+            if path1.exists() and path2.exists():
+                # Load both stems and average
+                y1, sr1 = sf.read(str(path1))
+                y2, sr2 = sf.read(str(path2))
+
+                # Match lengths (trim to shorter)
+                min_len = min(len(y1), len(y2))
+                y1 = y1[:min_len]
+                y2 = y2[:min_len]
+
+                # Average
+                y_avg = (y1 + y2) / 2.0
+
+                # Save averaged stem
+                avg_path = ensemble_dir / f"{stem_name}.wav"
+                sf.write(str(avg_path), y_avg, sr1)
+                stems[stem_name] = str(avg_path)
+
+            elif path1.exists():
+                stems[stem_name] = str(path1)
+            elif path2.exists():
+                stems[stem_name] = str(path2)
+
+        if stems:
+            return stems
+
+    # ── Fallback: use whichever model succeeded ────────────────
+    if model1_ok and model1_dir.exists():
+        stems = {}
+        for stem_name in stem_names:
+            stem_path = model1_dir / f"{stem_name}.wav"
+            if stem_path.exists():
+                stems[stem_name] = str(stem_path)
+        if stems:
+            return stems
+
+    if model2_ok and model2_dir.exists():
+        stems = {}
+        for stem_name in stem_names:
+            stem_path = model2_dir / f"{stem_name}.wav"
+            if stem_path.exists():
+                stems[stem_name] = str(stem_path)
+        if stems:
+            return stems
+
+    # ── Last resort: basic htdemucs ────────────────────────────
+    cmd3 = [
+        "python", "-m", "demucs",
+        "-n", "htdemucs",
+        "--shifts", "1",
+        "--out", output_dir,
+        wav_path,
+    ]
+    result3 = subprocess.run(cmd3, capture_output=True, text=True, timeout=300)
+    if result3.returncode != 0:
+        raise Exception(f"All Demucs models failed. Last error: {result3.stderr[:300]}")
+
+    fallback_dir = Path(output_dir) / "htdemucs" / song_name
     stems = {}
-    for stem_name in ["bass", "drums", "vocals", "other"]:
-        stem_path = stem_dir / f"{stem_name}.wav"
+    for stem_name in stem_names:
+        stem_path = fallback_dir / f"{stem_name}.wav"
         if stem_path.exists():
             stems[stem_name] = str(stem_path)
 
     if not stems:
-        raise Exception(f"No stems found in {stem_dir}")
+        raise Exception(f"No stems found after fallback")
     return stems
 
 
