@@ -428,7 +428,11 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
     # A ghost is a single-beat group where:
     # a) The groups before and after have the same root (obvious misread), OR
     # b) The groups before and after both have common roots AND this root is uncommon
-    #    (passing note between two real chords)
+    #    (passing note between two real chords), OR
+    # c) It's 1 beat and the next group is 2+ beats (approach/passing note before
+    #    a real chord — a real chord change would hold for more than 1 beat), OR
+    # d) It's 1 beat and the previous group is 2+ beats (departure note after a
+    #    real chord)
     cleaned_groups = []
     for i, (root, start, end) in enumerate(groups):
         duration = end - start + 1
@@ -436,6 +440,8 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
         if duration <= 1 and i > 0 and i < len(groups) - 1:
             prev_root = groups[i - 1][0]
             next_root = groups[i + 1][0]
+            prev_duration = groups[i - 1][2] - groups[i - 1][1] + 1
+            next_duration = groups[i + 1][2] - groups[i + 1][1] + 1
 
             # Case a: same root on both sides
             if prev_root == next_root:
@@ -443,6 +449,20 @@ def build_chord_progression(bass_notes, harmonic_chroma, chordino_evidence,
 
             # Case b: both neighbours are common roots but this one isn't
             if prev_root in common_roots and next_root in common_roots and root not in common_roots:
+                continue
+
+            # Case c: single beat followed by a longer group — approach note
+            if next_duration >= 2:
+                continue
+
+            # Case d: single beat preceded by a longer group — departure note
+            if prev_duration >= 2:
+                continue
+
+        # Also check first position: single beat at start followed by longer group
+        if duration <= 1 and i == 0 and len(groups) > 1:
+            next_duration = groups[i + 1][2] - groups[i + 1][1] + 1
+            if next_duration >= 2:
                 continue
 
         cleaned_groups.append((root, start, end))
