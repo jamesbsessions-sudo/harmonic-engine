@@ -353,6 +353,65 @@ def detect_bass_roots(bass_path: str, beat_frames, sr=44100):
         else:
             bass_notes.append(None)
 
+    return bass_notes, y_bass
+
+
+def check_bass_energy(y_bass, sr=44100):
+    """
+    Check whether the bass stem has meaningful energy.
+    Returns a per-segment energy profile and an overall confidence score.
+    Low energy = no bass instrument present, should fall back to low-pass.
+    """
+    rms = librosa.feature.rms(y=y_bass, frame_length=2048, hop_length=512)
+    avg_rms = float(np.mean(rms))
+    max_rms = float(np.max(rms))
+
+    # Threshold: if average RMS is very low, bass stem is essentially empty
+    # These thresholds are tuned for normalised audio
+    if avg_rms < 0.005:
+        return 0.0, "empty"
+    elif avg_rms < 0.02:
+        return 0.3, "weak"
+    elif avg_rms < 0.05:
+        return 0.6, "moderate"
+    else:
+        return 1.0, "strong"
+
+
+def detect_bass_roots_lowpass(other_path: str, beat_frames, sr=44100):
+    """
+    Fallback bass root detection: low-pass filter the 'other' stem
+    to extract bass frequencies when there's no dedicated bass instrument.
+    """
+    from scipy.signal import butter, sosfilt
+
+    y_other, sr = librosa.load(other_path, sr=sr, mono=True)
+
+    # Low-pass filter at 300Hz to isolate bass frequencies
+    nyquist = sr / 2
+    cutoff = 300
+    sos = butter(5, cutoff / nyquist, btype='low', output='sos')
+    y_bass_filtered = sosfilt(sos, y_other)
+
+    bass_chroma = librosa.feature.chroma_cqt(
+        y=y_bass_filtered, sr=sr,
+        fmin=librosa.note_to_hz('C1'),
+        n_octaves=3,
+    )
+
+    if len(beat_frames) > 1:
+        beat_chroma = librosa.util.sync(bass_chroma, beat_frames, aggregate=np.median)
+    else:
+        beat_chroma = bass_chroma
+
+    bass_notes = []
+    for i in range(beat_chroma.shape[1]):
+        frame = beat_chroma[:, i]
+        if frame.sum() > 0:
+            bass_notes.append(NOTE_NAMES[frame.argmax()])
+        else:
+            bass_notes.append(None)
+
     return bass_notes
 
 
@@ -1224,6 +1283,7 @@ class AnalysisResult(BaseModel):
     harmonic_rhythm_per_bar: float
     harmonic_complexity: int
     bass_notes_detected: list[str]
+    bass_source: str
 
     # Melody
     melody: dict
@@ -1341,9 +1401,32 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         drum_path = stems.get("drums", None)
         tempo_feel, feel_tempo = detect_tempo_feel(y, sr, tempo, drum_path)
 
-        # Bass roots
+        # Bass roots — check energy first, fall back to low-pass if no bass instrument
+        bass_source = "none"
         if "bass" in stems:
-            bass_notes = detect_bass_roots(stems["bass"], beat_frames, sr)
+            bass_notes, y_bass_stem = detect_bass_roots(stems["bass"], beat_frames, sr)
+            bass_energy, bass_label = check_bass_energy(y_bass_stem, sr)
+
+            if bass_label in ("strong", "moderate"):
+                bass_source = "bass_stem"
+            elif bass_label == "weak" and "other" in stems:
+                # Weak bass stem — blend bass stem with low-pass of other stem
+                lowpass_notes = detect_bass_roots_lowpass(stems["other"], beat_frames, sr)
+                # Use low-pass where bass stem has no clear note
+                for i in range(len(bass_notes)):
+                    if i < len(lowpass_notes) and bass_notes[i] is None:
+                        bass_notes[i] = lowpass_notes[i]
+                bass_source = "blended"
+            else:
+                # Empty bass stem — use low-pass entirely
+                if "other" in stems:
+                    bass_notes = detect_bass_roots_lowpass(stems["other"], beat_frames, sr)
+                    bass_source = "lowpass"
+
+        elif "other" in stems:
+            # No bass stem at all — use low-pass
+            bass_notes = detect_bass_roots_lowpass(stems["other"], beat_frames, sr)
+            bass_source = "lowpass"
 
         # Harmonic chroma
         harmonic_chroma = None
@@ -1398,6 +1481,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         separation_used = False
         demucs_error = f"Demucs failed: {str(e)[:200]}"
         tempo_feel, feel_tempo = detect_tempo_feel(y, sr, tempo)
+        bass_source = "fallback_full_mix"
 
         # Fallback chord detection
         full_chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -1480,6 +1564,7 @@ def analyse_audio(wav_path: str, song_id: str) -> dict:
         "harmonic_rhythm_per_bar": harmonic_rhythm,
         "harmonic_complexity": complexity,
         "bass_notes_detected": bass_notes_normalised[:24],
+        "bass_source": bass_source,
         "melody": clean_melody,
         "melody_chord_relationship": melody_chord_data,
         "voicing": voicing_data,
