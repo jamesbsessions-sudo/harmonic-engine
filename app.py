@@ -1841,31 +1841,31 @@ class PlaylistRequest(BaseModel):
     url: str
 
 
-class PlaylistTrackResult(BaseModel):
+class PlaylistTrack(BaseModel):
     track_name: str
     artist_name: str
     album_name: str
+    search_query: str
+    itunes_preview_url: str
     itunes_match: str
-    analysis: Optional[AnalysisResult] = None
-    error: Optional[str] = None
+    artwork_url: str
 
 
 class PlaylistResponse(BaseModel):
     playlist_url: str
     total_tracks: int
-    analysed: int
-    results: list[PlaylistTrackResult]
+    matched_tracks: int
+    tracks: list[PlaylistTrack]
 
 
-# ── Playlist endpoint ─────────────────────────────────────────────
-@app.post("/analyse/playlist", response_model=PlaylistResponse)
-def analyse_playlist(req: PlaylistRequest):
+# ── Playlist endpoint (lightweight — just fetches track list + iTunes matches)
+@app.post("/playlist/tracks", response_model=PlaylistResponse)
+def get_playlist_tracks_endpoint(req: PlaylistRequest):
     """
-    Analyse all tracks in a Spotify playlist.
-    Fetches track names from Spotify, finds previews on iTunes,
-    and runs full analysis on each.
+    Fetch tracks from a Spotify playlist and find iTunes preview matches.
+    Returns the track list with preview URLs — use /analyse/search to
+    analyse each track individually.
     """
-    # Get Spotify token and playlist tracks
     token = get_spotify_token()
     playlist_id = extract_playlist_id(req.url)
     tracks = get_playlist_tracks(playlist_id, token)
@@ -1874,64 +1874,38 @@ def analyse_playlist(req: PlaylistRequest):
         raise HTTPException(status_code=404, detail="No tracks found in playlist")
 
     results = []
-    analysed_count = 0
+    matched = 0
 
     for track in tracks:
         search_query = f"{track['track_name']} {track['artist_name']}"
-        track_result = PlaylistTrackResult(
+
+        playlist_track = PlaylistTrack(
             track_name=track["track_name"],
             artist_name=track["artist_name"],
             album_name=track["album_name"],
+            search_query=search_query,
+            itunes_preview_url="",
             itunes_match="",
-            analysis=None,
-            error=None,
+            artwork_url="",
         )
 
         try:
-            # Search iTunes
             itunes_results = search_itunes(search_query, limit=1)
-            if not itunes_results:
-                track_result.error = "No iTunes preview found"
-                results.append(track_result)
-                continue
+            if itunes_results:
+                playlist_track.itunes_preview_url = itunes_results[0]["preview_url"]
+                playlist_track.itunes_match = f"{itunes_results[0]['track_name']} - {itunes_results[0]['artist_name']}"
+                playlist_track.artwork_url = itunes_results[0]["artwork_url"]
+                matched += 1
+        except Exception:
+            pass
 
-            preview_url = itunes_results[0]["preview_url"]
-            itunes_name = f"{itunes_results[0]['track_name']} - {itunes_results[0]['artist_name']}"
-            track_result.itunes_match = itunes_name
-
-            # Download preview
-            song_id = str(uuid.uuid4())[:8]
-            preview_path = str(WORK_DIR / f"{song_id}_preview.m4a")
-            wav_path = str(WORK_DIR / f"{song_id}.wav")
-
-            try:
-                download_preview(preview_url, preview_path)
-                to_wav(preview_path, wav_path)
-                analysis = analyse_audio(wav_path, song_id)
-
-                track_result.analysis = AnalysisResult(
-                    song_id=song_id,
-                    source="itunes_preview",
-                    notes=f"Analysis complete. Source: {itunes_name}",
-                    **analysis,
-                )
-                analysed_count += 1
-
-            finally:
-                for f in WORK_DIR.glob(f"{song_id}*"):
-                    if f.is_file():
-                        f.unlink(missing_ok=True)
-
-        except Exception as e:
-            track_result.error = f"Analysis failed: {str(e)[:200]}"
-
-        results.append(track_result)
+        results.append(playlist_track)
 
     return PlaylistResponse(
         playlist_url=req.url,
         total_tracks=len(tracks),
-        analysed=analysed_count,
-        results=results,
+        matched_tracks=matched,
+        tracks=results,
     )
 
 
