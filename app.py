@@ -1766,5 +1766,174 @@ def analyse_search(req: SearchAnalyseRequest):
                 f.unlink(missing_ok=True)
 
 
+# ── Spotify playlist helpers ──────────────────────────────────────
+import base64
+import re
+
+
+def get_spotify_token() -> str:
+    """Get a Spotify API access token using client credentials flow."""
+    client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Spotify credentials not configured")
+
+    auth_str = f"{client_id}:{client_secret}"
+    auth_b64 = base64.b64encode(auth_str.encode()).decode()
+
+    req_data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
+    req = urllib.request.Request(
+        "https://accounts.spotify.com/api/token",
+        data=req_data,
+        headers={
+            "Authorization": f"Basic {auth_b64}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+
+    with urllib.request.urlopen(req, timeout=10) as response:
+        data = json_module.loads(response.read().decode())
+
+    return data["access_token"]
+
+
+def extract_playlist_id(url: str) -> str:
+    """Extract playlist ID from a Spotify URL."""
+    # Handles: https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+    # Also: spotify:playlist:37i9dQZF1DXcBWIGoYBM5M
+    match = re.search(r'playlist[/:]([a-zA-Z0-9]+)', url)
+    if match:
+        return match.group(1)
+    raise HTTPException(status_code=400, detail="Could not extract playlist ID from URL")
+
+
+def get_playlist_tracks(playlist_id: str, token: str) -> list[dict]:
+    """Fetch track names and artists from a Spotify playlist."""
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?fields=items(track(name,artists(name),album(name)))"
+
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    with urllib.request.urlopen(req, timeout=10) as response:
+        data = json_module.loads(response.read().decode())
+
+    tracks = []
+    for item in data.get("items", []):
+        track = item.get("track")
+        if not track:
+            continue
+
+        artist_names = [a["name"] for a in track.get("artists", [])]
+        tracks.append({
+            "track_name": track.get("name", ""),
+            "artist_name": ", ".join(artist_names),
+            "album_name": track.get("album", {}).get("name", ""),
+        })
+
+    return tracks
+
+
+# ── Playlist models ───────────────────────────────────────────────
+class PlaylistRequest(BaseModel):
+    url: str
+
+
+class PlaylistTrackResult(BaseModel):
+    track_name: str
+    artist_name: str
+    album_name: str
+    itunes_match: str
+    analysis: Optional[AnalysisResult] = None
+    error: Optional[str] = None
+
+
+class PlaylistResponse(BaseModel):
+    playlist_url: str
+    total_tracks: int
+    analysed: int
+    results: list[PlaylistTrackResult]
+
+
+# ── Playlist endpoint ─────────────────────────────────────────────
+@app.post("/analyse/playlist", response_model=PlaylistResponse)
+def analyse_playlist(req: PlaylistRequest):
+    """
+    Analyse all tracks in a Spotify playlist.
+    Fetches track names from Spotify, finds previews on iTunes,
+    and runs full analysis on each.
+    """
+    # Get Spotify token and playlist tracks
+    token = get_spotify_token()
+    playlist_id = extract_playlist_id(req.url)
+    tracks = get_playlist_tracks(playlist_id, token)
+
+    if not tracks:
+        raise HTTPException(status_code=404, detail="No tracks found in playlist")
+
+    results = []
+    analysed_count = 0
+
+    for track in tracks:
+        search_query = f"{track['track_name']} {track['artist_name']}"
+        track_result = PlaylistTrackResult(
+            track_name=track["track_name"],
+            artist_name=track["artist_name"],
+            album_name=track["album_name"],
+            itunes_match="",
+            analysis=None,
+            error=None,
+        )
+
+        try:
+            # Search iTunes
+            itunes_results = search_itunes(search_query, limit=1)
+            if not itunes_results:
+                track_result.error = "No iTunes preview found"
+                results.append(track_result)
+                continue
+
+            preview_url = itunes_results[0]["preview_url"]
+            itunes_name = f"{itunes_results[0]['track_name']} - {itunes_results[0]['artist_name']}"
+            track_result.itunes_match = itunes_name
+
+            # Download preview
+            song_id = str(uuid.uuid4())[:8]
+            preview_path = str(WORK_DIR / f"{song_id}_preview.m4a")
+            wav_path = str(WORK_DIR / f"{song_id}.wav")
+
+            try:
+                download_preview(preview_url, preview_path)
+                to_wav(preview_path, wav_path)
+                analysis = analyse_audio(wav_path, song_id)
+
+                track_result.analysis = AnalysisResult(
+                    song_id=song_id,
+                    source="itunes_preview",
+                    notes=f"Analysis complete. Source: {itunes_name}",
+                    **analysis,
+                )
+                analysed_count += 1
+
+            finally:
+                for f in WORK_DIR.glob(f"{song_id}*"):
+                    if f.is_file():
+                        f.unlink(missing_ok=True)
+
+        except Exception as e:
+            track_result.error = f"Analysis failed: {str(e)[:200]}"
+
+        results.append(track_result)
+
+    return PlaylistResponse(
+        playlist_url=req.url,
+        total_tracks=len(tracks),
+        analysed=analysed_count,
+        results=results,
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
