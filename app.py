@@ -1264,6 +1264,34 @@ class AnalyseURLRequest(BaseModel):
     url: str
 
 
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+class SearchResult(BaseModel):
+    track_name: str
+    artist_name: str
+    album_name: str
+    preview_url: str
+    artwork_url: str
+    track_id: int
+    genre: str
+    release_date: str
+    duration_ms: int
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResult]
+    query: str
+
+
+class SearchAnalyseRequest(BaseModel):
+    query: str = ""
+    track_id: int = 0
+    preview_url: str = ""
+
+
 class AnalysisResult(BaseModel):
     song_id: str
     source: str
@@ -1611,6 +1639,127 @@ async def analyse_upload(file: UploadFile = File(...)):
         to_wav(upload_path, wav_path)
         results = analyse_audio(wav_path, song_id)
         return AnalysisResult(song_id=song_id, source="upload", notes="Analysis complete", **results)
+    finally:
+        for f in WORK_DIR.glob(f"{song_id}*"):
+            if f.is_file():
+                f.unlink(missing_ok=True)
+
+
+# ── iTunes Search helpers ─────────────────────────────────────────
+import urllib.request
+import urllib.parse
+import json as json_module
+
+
+def search_itunes(query: str, limit: int = 5) -> list[dict]:
+    """Search iTunes for songs and return results with preview URLs."""
+    encoded = urllib.parse.quote(query)
+    url = f"https://itunes.apple.com/search?term={encoded}&media=music&entity=song&limit={limit}"
+
+    req = urllib.request.Request(url, headers={"User-Agent": "HarmonicEngine/1.0"})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        data = json_module.loads(response.read().decode())
+
+    results = []
+    for item in data.get("results", []):
+        preview_url = item.get("previewUrl", "")
+        if not preview_url:
+            continue
+
+        results.append({
+            "track_name": item.get("trackName", ""),
+            "artist_name": item.get("artistName", ""),
+            "album_name": item.get("collectionName", ""),
+            "preview_url": preview_url,
+            "artwork_url": item.get("artworkUrl100", "").replace("100x100", "600x600"),
+            "track_id": item.get("trackId", 0),
+            "genre": item.get("primaryGenreName", ""),
+            "release_date": item.get("releaseDate", ""),
+            "duration_ms": item.get("trackTimeMillis", 0),
+        })
+
+    return results
+
+
+def download_preview(preview_url: str, output_path: str) -> str:
+    """Download an iTunes preview clip."""
+    req = urllib.request.Request(preview_url, headers={"User-Agent": "HarmonicEngine/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        with open(output_path, "wb") as f:
+            f.write(response.read())
+    return output_path
+
+
+# ── iTunes Search endpoint ────────────────────────────────────────
+@app.post("/search", response_model=SearchResponse)
+def search_songs(req: SearchRequest):
+    """Search iTunes for songs. Returns track info and preview URLs."""
+    try:
+        results = search_itunes(req.query, req.limit)
+        return SearchResponse(
+            results=[SearchResult(**r) for r in results],
+            query=req.query,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)[:200]}")
+
+
+# ── Search + Analyse endpoint ─────────────────────────────────────
+@app.post("/analyse/search", response_model=AnalysisResult)
+def analyse_search(req: SearchAnalyseRequest):
+    """
+    Search for a song, download the 30s preview, and analyse it.
+    Can provide either:
+    - query: searches iTunes, picks first result
+    - track_id: looks up a specific iTunes track
+    - preview_url: directly downloads and analyses a preview URL
+    """
+    song_id = str(uuid.uuid4())[:8]
+    preview_path = str(WORK_DIR / f"{song_id}_preview.m4a")
+    wav_path = str(WORK_DIR / f"{song_id}.wav")
+
+    try:
+        # Get the preview URL
+        if req.preview_url:
+            preview_url = req.preview_url
+            track_info = "Direct preview URL"
+        elif req.track_id:
+            # Look up specific track
+            lookup_url = f"https://itunes.apple.com/lookup?id={req.track_id}"
+            lookup_req = urllib.request.Request(lookup_url, headers={"User-Agent": "HarmonicEngine/1.0"})
+            with urllib.request.urlopen(lookup_req, timeout=10) as response:
+                data = json_module.loads(response.read().decode())
+            results = data.get("results", [])
+            if not results or "previewUrl" not in results[0]:
+                raise HTTPException(status_code=404, detail="Track not found or no preview available")
+            preview_url = results[0]["previewUrl"]
+            track_info = f"{results[0].get('trackName', '')} - {results[0].get('artistName', '')}"
+        elif req.query:
+            # Search and pick first result
+            results = search_itunes(req.query, limit=1)
+            if not results:
+                raise HTTPException(status_code=404, detail=f"No results found for '{req.query}'")
+            preview_url = results[0]["preview_url"]
+            track_info = f"{results[0]['track_name']} - {results[0]['artist_name']}"
+        else:
+            raise HTTPException(status_code=400, detail="Provide query, track_id, or preview_url")
+
+        # Download the preview
+        download_preview(preview_url, preview_path)
+
+        # Convert to WAV
+        to_wav(preview_path, wav_path)
+
+        # Analyse
+        results = analyse_audio(wav_path, song_id)
+
+        return AnalysisResult(
+            song_id=song_id,
+            source="itunes_preview",
+            notes=f"Analysis complete. Source: {track_info}",
+            **results,
+        )
+
     finally:
         for f in WORK_DIR.glob(f"{song_id}*"):
             if f.is_file():
