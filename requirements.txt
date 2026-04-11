@@ -11,3 +11,8 @@ huggingface-hub>=0.20.0
 mido==1.3.2
 yt-dlp==2024.8.6
 pydantic==2.9.1
+basic-pitch>=0.4.0
+pretty-midi>=0.2.9
+mir-eval>=0.6
+resampy>=0.2.2,<0.4.3
+onnxruntime>=1.14.0
