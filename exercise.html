@@ -96,7 +96,6 @@
     }
     EP_MK1_Module().then(mod => {
       heavyModule = mod
-      loader = new heavyModule.AudioLibLoader()
       setStatus('Ready — click Start Audio')
       document.getElementById('start-btn').disabled = false
     }).catch(e => {
@@ -105,17 +104,33 @@
   })
 
   document.getElementById('start-btn').onclick = () => {
-    loader.init({
-      blockSize: 256,
-      printHook: msg => console.log('[heavy]', msg),
-      sendHook: null,
-    }).then(() => {
-      loader.start()
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const blockSize = 256
+      const instance = new heavyModule.EP_MK1_AudioLib({
+        sampleRate: ctx.sampleRate,
+        blockSize: blockSize,
+        printHook: msg => console.log('[heavy]', msg),
+        sendHook: null,
+      })
+      // ScriptProcessorNode — works in all browsers, no worklet file needed
+      const processor = ctx.createScriptProcessor(
+        blockSize,
+        instance.getNumInputChannels(),
+        Math.max(instance.getNumOutputChannels(), 1)
+      )
+      processor.onaudioprocess = e => instance.process(e)
+      processor.connect(ctx.destination)
+      // expose sendMidi so the rest of the code can call loader.audiolib.sendMidi
+      loader = { audiolib: instance }
       ready = true
       setStatus('Playing — use MIDI keyboard or click chords')
       document.getElementById('start-btn').style.display = 'none'
       initMidi()
-    })
+    } catch(e) {
+      setStatus('Audio error: ' + e.message)
+      console.error(e)
+    }
   }
 
   // ── Web MIDI ─────────────────────────────────────────────────────────────
