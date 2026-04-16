@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Harmonic Exercise Engine</title>
+  <script src="/static/EP_MK1.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #ddd;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+    }
+    h1 { font-size: 13px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; color: #666; }
+    #status { font-size: 13px; color: #555; min-height: 20px; }
+    #midi-status { font-size: 12px; color: #444; }
+    #start-btn {
+      padding: 10px 32px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+    }
+    #start-btn:hover { background: #222; border-color: #666; }
+    #start-btn:disabled { opacity: 0.3; cursor: default; }
+    .chord-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chord-btn {
+      padding: 8px 18px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #aaa;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .chord-btn:hover { background: #222; border-color: #555; }
+    .chord-btn.active { background: #0f2a3f; border-color: #2a6a9f; color: #88bbdd; }
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>EP-MK1 Physical Model</h1>
+  <div id="status">Loading synth...</div>
+  <div id="midi-status">MIDI: waiting</div>
+
+  <button id="start-btn" disabled>Start Audio</button>
+
+  <div>
+    <div class="section-label" style="text-align:center; margin-bottom: 10px">Test chords</div>
+    <div class="chord-row" id="chord-row"></div>
+  </div>
+
+  <script>
+  // ── Voicings from profile (transposable) ─────────────────────────────────
+  const CHORDS = {
+    'Am7':   { notes: [45, 55, 60, 64] },  // A2 G3 C4 E4
+    'Fmaj9': { notes: [41, 52, 55, 60] },  // F2 E3 G3 C4
+    'Cmaj7': { notes: [48, 52, 55, 59] },  // C3 E3 G3 B3
+    'Em7':   { notes: [40, 47, 52, 55] },  // E2 B2 E3 G3
+    'Dmaj9': { notes: [38, 45, 50, 54] },  // D2 A2 D3 F#3
+    'Bm7':   { notes: [35, 42, 45, 50] },  // B1 F#2 A2 D3
+  }
+
+  // ── Heavy / WASM state ───────────────────────────────────────────────────
+  let heavyModule = null
+  let loader = null
+  let ready = false
+  let activeChord = null
+
+  // Wait for EP_MK1_Module to be available (loaded by script tag)
+  window.addEventListener('load', () => {
+    if (typeof EP_MK1_Module === 'undefined') {
+      setStatus('Error: EP_MK1.js failed to load')
+      return
+    }
+    EP_MK1_Module().then(mod => {
+      heavyModule = mod
+      loader = new heavyModule.AudioLibLoader()
+      setStatus('Ready — click Start Audio')
+      document.getElementById('start-btn').disabled = false
+    }).catch(e => {
+      setStatus('Error loading WASM: ' + e.message)
+    })
+  })
+
+  document.getElementById('start-btn').onclick = () => {
+    loader.init({
+      blockSize: 256,
+      printHook: msg => console.log('[heavy]', msg),
+      sendHook: null,
+    }).then(() => {
+      loader.start()
+      ready = true
+      setStatus('Playing — use MIDI keyboard or click chords')
+      document.getElementById('start-btn').style.display = 'none'
+      initMidi()
+    })
+  }
+
+  // ── Web MIDI ─────────────────────────────────────────────────────────────
+  function initMidi() {
+    if (!navigator.requestMIDIAccess) {
+      setMidiStatus('Web MIDI not supported in this browser')
+      return
+    }
+    navigator.requestMIDIAccess().then(access => {
+      const inputs = Array.from(access.inputs.values())
+      if (inputs.length === 0) {
+        setMidiStatus('No MIDI device found — connect keyboard and refresh')
+        return
+      }
+      inputs.forEach(input => {
+        input.onmidimessage = onMidiMessage
+        setMidiStatus('MIDI: ' + input.name)
+      })
+      // Watch for new devices
+      access.onstatechange = e => {
+        if (e.port.type === 'input' && e.port.state === 'connected') {
+          e.port.onmidimessage = onMidiMessage
+          setMidiStatus('MIDI: ' + e.port.name)
+        }
+      }
+    }).catch(e => {
+      setMidiStatus('MIDI access denied: ' + e.message)
+    })
+  }
+
+  function onMidiMessage(msg) {
+    if (!ready || !loader) return
+    // Pass raw MIDI bytes directly to Heavy — it handles note on/off,
+    // velocity, channel, poly — exactly like a hardware synth
+    loader.audiolib.sendMidi(msg.data)
+  }
+
+  // ── Chord buttons (for testing without a MIDI keyboard) ──────────────────
+  const row = document.getElementById('chord-row')
+  Object.entries(CHORDS).forEach(([name, chord]) => {
+    const btn = document.createElement('button')
+    btn.className = 'chord-btn'
+    btn.textContent = name
+    btn.addEventListener('mousedown', () => {
+      if (!ready) return
+      // Release previous chord
+      if (activeChord) {
+        activeChord.notes.forEach((n, i) => {
+          // note off: status=0x80, note, velocity=0
+          loader.audiolib.sendMidi(new Uint8Array([0x80, n, 0]))
+        })
+        activeChord.btn.classList.remove('active')
+      }
+      // Play new chord — each note on a separate MIDI channel (1-4)
+      // so Heavy's poly voice allocation handles them independently
+      chord.notes.forEach((n, i) => {
+        loader.audiolib.sendMidi(new Uint8Array([0x90 | i, n, 90]))
+      })
+      activeChord = { notes: chord.notes, btn }
+      btn.classList.add('active')
+    })
+    btn.addEventListener('mouseup', () => {
+      if (!ready || !activeChord || activeChord.btn !== btn) return
+      activeChord.notes.forEach((n, i) => {
+        loader.audiolib.sendMidi(new Uint8Array([0x80 | i, n, 0]))
+      })
+      btn.classList.remove('active')
+      activeChord = null
+    })
+    row.appendChild(btn)
+  })
+
+  function setStatus(msg) { document.getElementById('status').textContent = msg }
+  function setMidiStatus(msg) { document.getElementById('midi-status').textContent = msg }
+  </script>
+</body>
+</html>
