@@ -3,7 +3,7 @@ FROM emscripten/emsdk:3.1.50 AS wasm-builder
 
 RUN pip install hvcc --break-system-packages
 
-COPY EP-MK1/EP-MK1-Plugins/EP-MK1-heavy/ /patch/
+COPY EP-MK1-heavy/ /patch/
 
 RUN hvcc /patch/_main.pd \
       -o /wasm \
