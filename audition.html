@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sound Audition</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e0e;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --text: #e8e3dc;
+    --muted: #6b6560;
+    --accent: #c4725a;
+    --accent-dim: rgba(196, 114, 90, 0.15);
+    --green: #5a9e6f;
+    --green-dim: rgba(90, 158, 111, 0.15);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  header {
+    margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 44px);
+    letter-spacing: -0.03em;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  header p {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* chord selector */
+  .chord-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .chord-bar label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+
+  .chord-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .chord-pill:hover { border-color: var(--accent); color: var(--text); }
+  .chord-pill.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+  /* instrument grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+
+  .card.loading::before { transform: scaleX(0.4); }
+  .card.ready::before { transform: scaleX(1); background: var(--green); }
+  .card.playing::before { transform: scaleX(1); background: var(--accent); animation: pulse-bar 0.6s ease infinite alternate; }
+
+  @keyframes pulse-bar {
+    from { opacity: 1; }
+    to { opacity: 0.4; }
+  }
+
+  .card-role {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .card-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .card-source {
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    letter-spacing: 0.04em;
+  }
+
+  .card-status {
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    min-height: 14px;
+    letter-spacing: 0.06em;
+  }
+
+  .card.ready .card-status { color: var(--green); }
+  .card.playing .card-status { color: var(--accent); }
+
+  .card-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .btn-play {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 9px 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+
+  .btn-play:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .btn-play:disabled { opacity: 0.35; cursor: default; }
+
+  .card.ready .btn-play {
+    border-color: rgba(90, 158, 111, 0.4);
+    color: var(--text);
+  }
+
+  .card.playing .btn-play {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .vol-slider {
+    -webkit-appearance: none;
+    width: 60px;
+    height: 2px;
+    background: var(--border);
+    outline: none;
+    border-radius: 1px;
+    cursor: pointer;
+  }
+
+  .vol-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    background: var(--muted);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .vol-slider:hover::-webkit-slider-thumb { background: var(--accent); }
+
+  /* drums special layout */
+  .card.drums .card-controls {
+    flex-wrap: wrap;
+  }
+
+  .btn-drum {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+
+  .btn-drum:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .btn-drum:disabled { opacity: 0.35; cursor: default; }
+
+  /* filter section */
+  .card-fx {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .fx-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fx-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* bottom note */
+  .note {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 560px;
+  }
+
+  .note strong { color: var(--text); }
+
+  /* loading overlay */
+  #init-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 100;
+    transition: opacity 0.4s;
+  }
+
+  #init-overlay h2 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+
+  #init-overlay p {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  #init-btn {
+    margin-top: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 14px 36px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: opacity 0.15s;
+  }
+
+  #init-btn:hover { opacity: 0.85; }
+</style>
+</head>
+<body>
+
+<div id="init-overlay">
+  <h2>Sound Audition</h2>
+  <p>WebAudioFont instruments — click to initialise audio</p>
+  <button id="init-btn">Start</button>
+</div>
+
+<header>
+  <h1>Sound Audition</h1>
+  <p>Tap play on each instrument — judge quality, adjust volume</p>
+</header>
+
+<div class="chord-bar">
+  <label>Chord</label>
+  <button class="chord-pill active" data-chord="maj7">Cmaj7</button>
+  <button class="chord-pill" data-chord="min7">Dm7</button>
+  <button class="chord-pill" data-chord="dom7">G7</button>
+  <button class="chord-pill" data-chord="maj9">Fmaj9</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="note">
+  <strong>How to use:</strong> Each card loads independently from CDN — the green bar means ready.
+  Play any chord, adjust volume, listen for character. The EP-MK1 (WASM) is already in the exercise engine.
+  These are candidates for bass, piano, pads and drums.
+</div>
+
+<!-- WebAudioFont player -->
+<script src="https://cdn.jsdelivr.net/npm/webaudiofont@3.0.4/npm/dist/WebAudioFontPlayer.js"></script>
+
+<script>
+// ── Chord definitions (MIDI notes) ──────────────────────────────────────────
+const CHORDS = {
+  maj7: [48, 52, 55, 59, 64],   // Cmaj7 voicing
+  min7: [50, 53, 57, 60, 65],   // Dm7
+  dom7: [55, 59, 62, 65, 69],   // G7
+  maj9: [53, 57, 60, 64, 69],   // Fmaj9
+}
+
+let activeChord = 'maj7'
+document.querySelectorAll('.chord-pill').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.chord-pill').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    activeChord = btn.dataset.chord
+  }
+})
+
+// ── Instrument definitions ───────────────────────────────────────────────────
+// Each entry: role, display name, GM source tag, CDN file, variable name, type
+const INSTRUMENTS = [
+  {
+    id: 'piano-jc',
+    role: 'Acoustic Piano',
+    name: 'Grand Piano',
+    source: 'JCLive sf2',
+    file: '0000_JCLive_sf2_file',
+    varName: '_tone_0000_JCLive_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'piano-fluid',
+    role: 'Acoustic Piano',
+    name: 'Grand Piano',
+    source: 'FluidR3 GM',
+    file: '0000_FluidR3_GM_sf2_file',
+    varName: '_tone_0000_FluidR3_GM_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'ep2-jc',
+    role: 'Electric Piano',
+    name: 'EP2 (Rhodes-ish)',
+    source: 'JCLive sf2',
+    file: '0500_JCLive_sf2_file',
+    varName: '_tone_0500_JCLive_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'ep1-fluid',
+    role: 'Electric Piano',
+    name: 'EP1 (Wurli-ish)',
+    source: 'FluidR3 GM',
+    file: '0400_FluidR3_GM_sf2_file',
+    varName: '_tone_0400_FluidR3_GM_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'bass-finger',
+    role: 'Bass',
+    name: 'Finger Bass',
+    source: 'FluidR3 GM',
+    file: '0330_FluidR3_GM_sf2_file',
+    varName: '_tone_0330_FluidR3_GM_sf2_file',
+    type: 'bass',
+  },
+  {
+    id: 'bass-fretless',
+    role: 'Bass',
+    name: 'Fretless Bass',
+    source: 'FluidR3 GM',
+    file: '0350_FluidR3_GM_sf2_file',
+    varName: '_tone_0350_FluidR3_GM_sf2_file',
+    type: 'bass',
+  },
+  {
+    id: 'pad-strings',
+    role: 'Pad / Texture',
+    name: 'String Ensemble',
+    source: 'FluidR3 GM',
+    file: '0480_FluidR3_GM_sf2_file',
+    varName: '_tone_0480_FluidR3_GM_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'pad-warm',
+    role: 'Pad / Texture',
+    name: 'Warm Pad',
+    source: 'FluidR3 GM',
+    file: '0890_FluidR3_GM_sf2_file',
+    varName: '_tone_0890_FluidR3_GM_sf2_file',
+    type: 'chord',
+  },
+  {
+    id: 'drums-sb',
+    role: 'Drums',
+    name: 'Standard Kit',
+    source: 'SBLive sf2',
+    file: '12800_SBLive_sf2',
+    varName: '_drum_12800_0_SBLive_sf2',
+    type: 'drums',
+  },
+  {
+    id: 'drums-fluid',
+    role: 'Drums',
+    name: 'Standard Kit',
+    source: 'FluidR3 GM',
+    file: '12800_FluidR3_GM_sf2_file',
+    varName: '_drum_12800_0_FluidR3_GM_sf2_file',
+    type: 'drums',
+  },
+]
+
+// MIDI notes for drum hits (GM standard)
+const DRUM_HITS = [
+  { label: 'Kick',  midi: 36 },
+  { label: 'Snare', midi: 38 },
+  { label: 'HH',    midi: 42 },
+  { label: 'Crash', midi: 49 },
+  { label: 'Ride',  midi: 51 },
+]
+
+// ── Audio state ──────────────────────────────────────────────────────────────
+let audioCtx = null
+let player = null
+const volumes = {}  // id → float 0-1
+const envelopes = {} // id → current envelope (for stop)
+
+INSTRUMENTS.forEach(inst => { volumes[inst.id] = 0.7 })
+
+// ── Render cards ─────────────────────────────────────────────────────────────
+function renderCards() {
+  const grid = document.getElementById('grid')
+  grid.innerHTML = ''
+
+  INSTRUMENTS.forEach(inst => {
+    const card = document.createElement('div')
+    card.className = 'card' + (inst.type === 'drums' ? ' drums' : '')
+    card.id = 'card-' + inst.id
+
+    const isDrum = inst.type === 'drums'
+    const isBass = inst.type === 'bass'
+
+    card.innerHTML = `
+      <div class="card-role">${inst.role}</div>
+      <div class="card-name">${inst.name}</div>
+      <div class="card-source">${inst.source}</div>
+      <div class="card-status" id="status-${inst.id}">Waiting...</div>
+      <div class="card-controls" id="controls-${inst.id}">
+        ${isDrum
+          ? DRUM_HITS.map(h => `<button class="btn-drum" data-midi="${h.midi}" id="drum-${inst.id}-${h.midi}" disabled>${h.label}</button>`).join('')
+          : `<button class="btn-play" id="play-${inst.id}" disabled>▶ Play chord</button>`
+        }
+        <input type="range" class="vol-slider" min="0" max="1" step="0.05"
+          value="${volumes[inst.id]}"
+          id="vol-${inst.id}"
+          title="Volume"
+          ${inst.type === 'drums' ? 'style="width:48px"' : ''}>
+      </div>
+      ${!isDrum ? `
+      <div class="card-fx">
+        <div class="fx-item">
+          <span class="fx-label">Reverb</span>
+          <input type="range" min="0" max="1" step="0.1" value="0.2" id="rev-${inst.id}" class="vol-slider" style="width:56px">
+        </div>
+        <div class="fx-item">
+          <span class="fx-label">Release</span>
+          <input type="range" min="0.1" max="4" step="0.1" value="1.5" id="rel-${inst.id}" class="vol-slider" style="width:56px">
+        </div>
+      </div>` : ''}
+    `
+
+    grid.appendChild(card)
+  })
+}
+
+// ── Load a single instrument ─────────────────────────────────────────────────
+function loadInstrument(inst) {
+  const card = document.getElementById('card-' + inst.id)
+  const status = document.getElementById('status-' + inst.id)
+
+  if (window[inst.varName]) {
+    // Already loaded (another card reuses same font)
+    markReady(inst)
+    return
+  }
+
+  card.classList.add('loading')
+  status.textContent = 'Loading...'
+
+  const script = document.createElement('script')
+  const base = 'https://surikov.github.io/webaudiofontdata/sound/'
+  script.src = base + inst.file + '.js'
+  script.onload = () => {
+    player.loader.decodeAfterLoading(audioCtx, inst.varName)
+    // Poll until decoded
+    const poll = setInterval(() => {
+      const preset = window[inst.varName]
+      if (preset && preset.buffer) {
+        clearInterval(poll)
+        markReady(inst)
+      }
+    }, 200)
+    // Timeout after 15s
+    setTimeout(() => clearInterval(poll), 15000)
+  }
+  script.onerror = () => {
+    card.classList.remove('loading')
+    status.textContent = 'Failed to load'
+  }
+  document.head.appendChild(script)
+}
+
+function markReady(inst) {
+  const card = document.getElementById('card-' + inst.id)
+  const status = document.getElementById('status-' + inst.id)
+  card.classList.remove('loading')
+  card.classList.add('ready')
+  status.textContent = 'Ready'
+
+  if (inst.type === 'drums') {
+    DRUM_HITS.forEach(h => {
+      const btn = document.getElementById(`drum-${inst.id}-${h.midi}`)
+      if (btn) {
+        btn.disabled = false
+        btn.onclick = () => playDrumHit(inst, h.midi)
+      }
+    })
+  } else {
+    const btn = document.getElementById('play-' + inst.id)
+    if (btn) {
+      btn.disabled = false
+      btn.onclick = () => toggleChord(inst)
+    }
+  }
+
+  // Volume slider
+  const vol = document.getElementById('vol-' + inst.id)
+  if (vol) vol.oninput = e => { volumes[inst.id] = parseFloat(e.target.value) }
+}
+
+// ── Play / stop chord ────────────────────────────────────────────────────────
+function toggleChord(inst) {
+  const card = document.getElementById('card-' + inst.id)
+  const status = document.getElementById('status-' + inst.id)
+  const btn = document.getElementById('play-' + inst.id)
+  const preset = window[inst.varName]
+  if (!preset) return
+
+  // Stop if already playing
+  if (envelopes[inst.id]) {
+    envelopes[inst.id].forEach(env => {
+      try { env.cancel() } catch(e) {}
+    })
+    envelopes[inst.id] = null
+    card.classList.remove('playing')
+    card.classList.add('ready')
+    status.textContent = 'Stopped'
+    btn.textContent = '▶ Play chord'
+    return
+  }
+
+  const notes = inst.type === 'bass'
+    ? [CHORDS[activeChord][0] - 24, CHORDS[activeChord][0] - 12] // root + octave down
+    : CHORDS[activeChord]
+
+  const vol = volumes[inst.id]
+  const release = parseFloat(document.getElementById('rel-' + inst.id)?.value || 1.5)
+  const duration = release + 0.5
+
+  // Reverb send — simple convolver if reverb > 0
+  const reverbVal = parseFloat(document.getElementById('rev-' + inst.id)?.value || 0)
+  let target = audioCtx.destination
+
+  if (reverbVal > 0) {
+    target = makeReverb(reverbVal)
+  }
+
+  const envs = []
+  notes.forEach((note, i) => {
+    const delay = inst.type === 'chord' ? i * 0.018 : 0 // gentle strum
+    const env = player.queueWaveTable(audioCtx, target, preset,
+      audioCtx.currentTime + delay, note, duration, vol)
+    if (env) envs.push(env)
+  })
+
+  envelopes[inst.id] = envs
+  card.classList.remove('ready')
+  card.classList.add('playing')
+  status.textContent = 'Playing...'
+  btn.textContent = '■ Stop'
+
+  // Auto-stop after duration
+  setTimeout(() => {
+    if (envelopes[inst.id] === envs) {
+      envelopes[inst.id] = null
+      card.classList.remove('playing')
+      card.classList.add('ready')
+      status.textContent = 'Ready'
+      btn.textContent = '▶ Play chord'
+    }
+  }, (duration + 0.5) * 1000)
+}
+
+function playDrumHit(inst, midi) {
+  const preset = window[inst.varName]
+  if (!preset) return
+  const vol = volumes[inst.id]
+  player.queueWaveTable(audioCtx, audioCtx.destination, preset,
+    audioCtx.currentTime, midi, 0.5, vol)
+}
+
+// ── Minimal reverb via filtered noise impulse ───────────────────────────────
+const reverbNodes = {}
+function makeReverb(amount) {
+  if (reverbNodes[amount]) return reverbNodes[amount]
+  const convolver = audioCtx.createConvolver()
+  const gain = audioCtx.createGain()
+  gain.gain.value = amount * 0.6
+
+  // Simple impulse response
+  const sampleRate = audioCtx.sampleRate
+  const length = sampleRate * 1.5
+  const buffer = audioCtx.createBuffer(2, length, sampleRate)
+  for (let c = 0; c < 2; c++) {
+    const data = buffer.getChannelData(c)
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2)
+    }
+  }
+  convolver.buffer = buffer
+  convolver.connect(gain)
+  gain.connect(audioCtx.destination)
+  reverbNodes[amount] = convolver
+  return convolver
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('init-btn').onclick = () => {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  player = new WebAudioFontPlayer()
+
+  const overlay = document.getElementById('init-overlay')
+  overlay.style.opacity = '0'
+  setTimeout(() => overlay.style.display = 'none', 400)
+
+  renderCards()
+
+  // Load all instruments (staggered to avoid hammering CDN)
+  INSTRUMENTS.forEach((inst, i) => {
+    setTimeout(() => loadInstrument(inst), i * 300)
+  })
+}
+</script>
+</body>
+</html>
