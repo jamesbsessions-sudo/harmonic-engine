@@ -528,37 +528,11 @@ function renderCards() {
 function loadInstrument(inst) {
   const card = document.getElementById('card-' + inst.id)
   const status = document.getElementById('status-' + inst.id)
-
-  if (window[inst.varName]) {
-    // Already loaded (another card reuses same font)
-    markReady(inst)
-    return
-  }
-
   card.classList.add('loading')
   status.textContent = 'Loading...'
-
-  const script = document.createElement('script')
   const base = 'https://surikov.github.io/webaudiofontdata/sound/'
-  script.src = base + inst.file + '.js'
-  script.onload = () => {
-    player.loader.decodeAfterLoading(audioCtx, inst.varName)
-    // Poll until decoded
-    const poll = setInterval(() => {
-      const preset = window[inst.varName]
-      if (preset && preset.buffer) {
-        clearInterval(poll)
-        markReady(inst)
-      }
-    }, 200)
-    // Timeout after 15s
-    setTimeout(() => clearInterval(poll), 15000)
-  }
-  script.onerror = () => {
-    card.classList.remove('loading')
-    status.textContent = 'Failed to load'
-  }
-  document.head.appendChild(script)
+  player.loader.startLoad(audioCtx, base + inst.file + '.js', inst.varName)
+  player.loader.waitLoad(() => markReady(inst))
 }
 
 function markReady(inst) {
