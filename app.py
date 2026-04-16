@@ -4582,6 +4582,13 @@ async def exercise():
         return HTMLResponse("<h1>exercise.html not found in repo root</h1>", status_code=404)
     return HTMLResponse(exercise_file.read_text())
 
+@app.get("/audition", response_class=HTMLResponse)
+async def audition():
+    """Sound audition page — WebAudioFont instrument previews."""
+    audition_file = _pathlib.Path(__file__).parent / "audition.html"
+    if not audition_file.exists():
+        return HTMLResponse("<h1>audition.html not found in repo root</h1>", status_code=404)
+    return HTMLResponse(audition_file.read_text())
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
