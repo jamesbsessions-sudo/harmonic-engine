@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Harmonic Exercise Engine</title>
   <script src="/static/EP_MK1.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -56,15 +57,51 @@
       letter-spacing: 0.1em;
       color: #444;
     }
+    /* instrument toggles */
+    .instrument-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .inst-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .inst-toggle.active { border-color: #3a7a3f; background: #0d1f10; color: #6abf72; }
+    .inst-toggle.loading { border-color: #555; color: #555; }
+    .inst-toggle .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #333;
+    }
+    .inst-toggle.active .dot { background: #6abf72; }
+    .inst-toggle.loading .dot { background: #555; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
   </style>
 </head>
 <body>
 
-  <h1>EP-MK1 Physical Model</h1>
+  <h1>Harmonic Exercise Engine</h1>
   <div id="status">Loading synth...</div>
   <div id="midi-status">MIDI: waiting</div>
 
   <button id="start-btn" disabled>Start Audio</button>
+
+  <div>
+    <div class="section-label" style="text-align:center; margin-bottom: 10px">Instruments</div>
+    <div class="instrument-row" id="instrument-row"></div>
+  </div>
 
   <div>
     <div class="section-label" style="text-align:center; margin-bottom: 10px">Test chords</div>
@@ -72,23 +109,38 @@
   </div>
 
   <script>
-  // ── Voicings from profile (transposable) ─────────────────────────────────
+  // ── Voicings ─────────────────────────────────────────────────────────────
   const CHORDS = {
-    'Am7':   { notes: [45, 55, 60, 64] },  // A2 G3 C4 E4
-    'Fmaj9': { notes: [41, 52, 55, 60] },  // F2 E3 G3 C4
-    'Cmaj7': { notes: [48, 52, 55, 59] },  // C3 E3 G3 B3
-    'Em7':   { notes: [40, 47, 52, 55] },  // E2 B2 E3 G3
-    'Dmaj9': { notes: [38, 45, 50, 54] },  // D2 A2 D3 F#3
-    'Bm7':   { notes: [35, 42, 45, 50] },  // B1 F#2 A2 D3
+    'Am7':   { notes: [45, 55, 60, 64] },
+    'Fmaj9': { notes: [41, 52, 55, 60] },
+    'Cmaj7': { notes: [48, 52, 55, 59] },
+    'Em7':   { notes: [40, 47, 52, 55] },
+    'Dmaj9': { notes: [38, 45, 50, 54] },
+    'Bm7':   { notes: [35, 42, 45, 50] },
   }
 
-  // ── Heavy / WASM state ───────────────────────────────────────────────────
-  let heavyModule = null
-  let loader = null
+  // ── Audio context (shared) ────────────────────────────────────────────────
+  let audioCtx = null
   let ready = false
   let activeChord = null
 
-  // Wait for EP_MK1_Module to be available (loaded by script tag)
+  // ── EP-MK1 (WASM) ─────────────────────────────────────────────────────────
+  let heavyModule = null
+  let epInstance = null   // has .sendMidi()
+  let epEnabled = true
+
+  // ── Salamander Grand (soundfont-player) ───────────────────────────────────
+  let salamander = null         // soundfont-player instrument
+  let salamanderEnabled = true
+  let salamanderNotes = []      // currently held nodes (for note-off)
+
+  // ── Instrument definitions (for toggle UI) ────────────────────────────────
+  const INSTRUMENTS = [
+    { id: 'ep',   label: 'EP-MK1',          subtitle: 'Physical model' },
+    { id: 'sal',  label: 'Salamander Grand', subtitle: 'Acoustic piano' },
+  ]
+
+  // ── Load EP-MK1 WASM ──────────────────────────────────────────────────────
   window.addEventListener('load', () => {
     if (typeof EP_MK1_Module === 'undefined') {
       setStatus('Error: EP_MK1.js failed to load')
@@ -98,33 +150,52 @@
       heavyModule = mod
       setStatus('Ready — click Start Audio')
       document.getElementById('start-btn').disabled = false
-    }).catch(e => {
-      setStatus('Error loading WASM: ' + e.message)
-    })
+    }).catch(e => setStatus('Error loading WASM: ' + e.message))
   })
 
+  // ── Start Audio ───────────────────────────────────────────────────────────
   document.getElementById('start-btn').onclick = () => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+
+      // — EP-MK1 —
       const blockSize = 256
       const instance = new heavyModule.EP_MK1_AudioLib({
-        sampleRate: ctx.sampleRate,
-        blockSize: blockSize,
-        printHook: msg => console.log('[heavy]', msg),
+        sampleRate: audioCtx.sampleRate,
+        blockSize,
+        printHook: null,
         sendHook: null,
       })
-      // ScriptProcessorNode — works in all browsers, no worklet file needed
-      const processor = ctx.createScriptProcessor(
+      const processor = audioCtx.createScriptProcessor(
         blockSize,
         instance.getNumInputChannels(),
         Math.max(instance.getNumOutputChannels(), 1)
       )
       processor.onaudioprocess = e => instance.process(e)
-      processor.connect(ctx.destination)
-      // expose sendMidi so the rest of the code can call loader.audiolib.sendMidi
-      loader = { audiolib: instance }
+      processor.connect(audioCtx.destination)
+      epInstance = instance
+      markInstrument('ep', 'active')
+
+      // — Salamander Grand —
+      markInstrument('sal', 'loading')
+      Soundfont.instrument(audioCtx, 'acoustic_grand_piano', {
+        soundfont: 'MusyngKite',
+        nameToUrl: (name, sf, format) =>
+          `https://gleitz.github.io/midi-js-soundfonts/${sf}/${name}-${format}.js`,
+        format: 'mp3',
+        gain: 3,
+      }).then(piano => {
+        salamander = piano
+        markInstrument('sal', 'active')
+        setStatus('Playing — use MIDI keyboard or click chords')
+      }).catch(e => {
+        console.error('Salamander load failed:', e)
+        markInstrument('sal', 'error')
+        setStatus('Piano failed to load — EP-MK1 only')
+      })
+
       ready = true
-      setStatus('Playing — use MIDI keyboard or click chords')
+      setStatus('EP ready, piano loading...')
       document.getElementById('start-btn').style.display = 'none'
       initMidi()
     } catch(e) {
@@ -133,10 +204,42 @@
     }
   }
 
-  // ── Web MIDI ─────────────────────────────────────────────────────────────
+  // ── Note on/off ───────────────────────────────────────────────────────────
+  function noteOn(midi, velocity) {
+    if (!ready) return
+    velocity = velocity || 90
+
+    if (epEnabled && epInstance) {
+      // EP-MK1: send raw MIDI — assign each note to its own channel for poly
+      epInstance.sendMidi(new Uint8Array([0x90, midi, velocity]))
+    }
+
+    if (salamanderEnabled && salamander) {
+      const node = salamander.play(midi, audioCtx.currentTime, { gain: velocity / 127 * 1.5 })
+      salamanderNotes.push({ midi, node })
+    }
+  }
+
+  function noteOff(midi) {
+    if (!ready) return
+
+    if (epEnabled && epInstance) {
+      epInstance.sendMidi(new Uint8Array([0x80, midi, 0]))
+    }
+
+    if (salamanderEnabled && salamander) {
+      const idx = salamanderNotes.findIndex(n => n.midi === midi)
+      if (idx !== -1) {
+        try { salamanderNotes[idx].node.stop(audioCtx.currentTime + 0.5) } catch(e) {}
+        salamanderNotes.splice(idx, 1)
+      }
+    }
+  }
+
+  // ── Web MIDI ──────────────────────────────────────────────────────────────
   function initMidi() {
     if (!navigator.requestMIDIAccess) {
-      setMidiStatus('Web MIDI not supported in this browser')
+      setMidiStatus('Web MIDI not supported')
       return
     }
     navigator.requestMIDIAccess().then(access => {
@@ -149,26 +252,27 @@
         input.onmidimessage = onMidiMessage
         setMidiStatus('MIDI: ' + input.name)
       })
-      // Watch for new devices
       access.onstatechange = e => {
         if (e.port.type === 'input' && e.port.state === 'connected') {
           e.port.onmidimessage = onMidiMessage
           setMidiStatus('MIDI: ' + e.port.name)
         }
       }
-    }).catch(e => {
-      setMidiStatus('MIDI access denied: ' + e.message)
-    })
+    }).catch(e => setMidiStatus('MIDI access denied: ' + e.message))
   }
 
   function onMidiMessage(msg) {
-    if (!ready || !loader) return
-    // Pass raw MIDI bytes directly to Heavy — it handles note on/off,
-    // velocity, channel, poly — exactly like a hardware synth
-    loader.audiolib.sendMidi(msg.data)
+    if (!ready) return
+    const cmd = msg.data[0] & 0xf0
+    const note = msg.data[1]
+    const vel = msg.data[2]
+    if (cmd === 0x90 && vel > 0) noteOn(note, vel)
+    else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) noteOff(note)
+    // pass everything to EP-MK1 for pitch bend, mod etc
+    if (epEnabled && epInstance) epInstance.sendMidi(msg.data)
   }
 
-  // ── Chord buttons (for testing without a MIDI keyboard) ──────────────────
+  // ── Chord buttons ─────────────────────────────────────────────────────────
   const row = document.getElementById('chord-row')
   Object.entries(CHORDS).forEach(([name, chord]) => {
     const btn = document.createElement('button')
@@ -176,32 +280,51 @@
     btn.textContent = name
     btn.addEventListener('mousedown', () => {
       if (!ready) return
-      // Release previous chord
       if (activeChord) {
-        activeChord.notes.forEach((n, i) => {
-          // note off: status=0x80, note, velocity=0
-          loader.audiolib.sendMidi(new Uint8Array([0x80, n, 0]))
-        })
+        activeChord.notes.forEach(n => noteOff(n))
         activeChord.btn.classList.remove('active')
       }
-      // Play new chord — each note on a separate MIDI channel (1-4)
-      // so Heavy's poly voice allocation handles them independently
-      chord.notes.forEach((n, i) => {
-        loader.audiolib.sendMidi(new Uint8Array([0x90 | i, n, 90]))
-      })
+      chord.notes.forEach((n, i) => noteOn(n, 90))
       activeChord = { notes: chord.notes, btn }
       btn.classList.add('active')
     })
     btn.addEventListener('mouseup', () => {
       if (!ready || !activeChord || activeChord.btn !== btn) return
-      activeChord.notes.forEach((n, i) => {
-        loader.audiolib.sendMidi(new Uint8Array([0x80 | i, n, 0]))
-      })
+      activeChord.notes.forEach(n => noteOff(n))
       btn.classList.remove('active')
       activeChord = null
     })
     row.appendChild(btn)
   })
+
+  // ── Instrument toggles ────────────────────────────────────────────────────
+  const instRow = document.getElementById('instrument-row')
+  INSTRUMENTS.forEach(inst => {
+    const el = document.createElement('div')
+    el.className = 'inst-toggle'
+    el.id = 'inst-' + inst.id
+    el.innerHTML = `<div class="dot"></div><span>${inst.label}</span>`
+    el.title = inst.subtitle
+    el.addEventListener('click', () => {
+      if (inst.id === 'ep') {
+        epEnabled = !epEnabled
+        el.classList.toggle('active', epEnabled)
+      } else if (inst.id === 'sal') {
+        if (!salamander) return
+        salamanderEnabled = !salamanderEnabled
+        el.classList.toggle('active', salamanderEnabled)
+      }
+    })
+    instRow.appendChild(el)
+  })
+
+  function markInstrument(id, state) {
+    const el = document.getElementById('inst-' + id)
+    if (!el) return
+    el.classList.remove('active', 'loading')
+    if (state === 'active') el.classList.add('active')
+    else if (state === 'loading') el.classList.add('loading')
+  }
 
   function setStatus(msg) { document.getElementById('status').textContent = msg }
   function setMidiStatus(msg) { document.getElementById('midi-status').textContent = msg }
