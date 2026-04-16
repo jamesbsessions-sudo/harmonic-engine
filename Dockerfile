@@ -28,6 +28,7 @@ RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download('lj1
 RUN python -c "from basic_pitch.inference import predict; print('Basic Pitch ONNX model OK')"
 
 COPY app.py .
+COPY exercise.html .
 COPY rmvpe_model.py .
 COPY rmvpe_pitch.py .
 
