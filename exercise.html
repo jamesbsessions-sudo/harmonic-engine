@@ -16,7 +16,7 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      gap: 24px;
+      gap: 20px;
       padding: 24px;
     }
     h1 { font-size: 13px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; color: #666; }
@@ -34,23 +34,6 @@
     }
     #start-btn:hover { background: #222; border-color: #666; }
     #start-btn:disabled { opacity: 0.3; cursor: default; }
-    .chord-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .chord-btn {
-      padding: 8px 18px;
-      background: #1a1a1a;
-      border: 1px solid #333;
-      color: #aaa;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .chord-btn:hover { background: #222; border-color: #555; }
-    .chord-btn.active { background: #0f2a3f; border-color: #2a6a9f; color: #88bbdd; }
     .section-label {
       font-size: 11px;
       text-transform: uppercase;
@@ -79,34 +62,123 @@
     }
     .inst-toggle.active { border-color: #3a7a3f; background: #0d1f10; color: #6abf72; }
     .inst-toggle.loading { border-color: #555; color: #555; }
-    .inst-toggle .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: #333;
-    }
+    .inst-toggle .dot { width: 6px; height: 6px; border-radius: 50%; background: #333; }
     .inst-toggle.active .dot { background: #6abf72; }
     .inst-toggle.loading .dot { background: #555; animation: blink 1s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-    /* drum info */
-    #drum-info {
-      font-size: 11px;
-      color: #444;
-      text-align: center;
-      letter-spacing: 0.05em;
-      min-height: 16px;
+
+    /* Exercise display */
+    #exercise-display {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 520px;
     }
-    .drum-btn {
-      padding: 7px 14px;
+    #exercise-display.visible { display: flex; }
+    #exercise-info {
+      text-align: center;
+      font-size: 11px;
+      color: #555;
+      letter-spacing: 0.08em;
+    }
+    .chord-display {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    .chord-card {
       background: #1a1a1a;
       border: 1px solid #333;
-      color: #888;
+      border-radius: 8px;
+      padding: 16px 24px;
+      text-align: center;
+      min-width: 100px;
+      transition: border-color 0.1s, background 0.1s;
+    }
+    .chord-card.playing {
+      border-color: #2a6a9f;
+      background: #0f2a3f;
+    }
+    .chord-card .chord-name {
+      font-size: 20px;
+      font-weight: 500;
+      color: #ccc;
+      letter-spacing: 0.03em;
+    }
+    .chord-card.playing .chord-name { color: #88bbdd; }
+    .chord-card .chord-role {
+      font-size: 10px;
+      color: #444;
+      margin-top: 4px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .exercise-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .ex-btn {
+      padding: 8px 20px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #aaa;
       border-radius: 6px;
       cursor: pointer;
       font-size: 12px;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
+      transition: all 0.15s;
     }
-    .drum-btn:hover:not(:disabled) { background: #222; border-color: #555; }
-    .drum-btn:disabled { opacity: 0.35; cursor: default; }
+    .ex-btn:hover:not(:disabled) { background: #222; border-color: #666; color: #ccc; }
+    .ex-btn:disabled { opacity: 0.3; cursor: default; }
+    .ex-btn.primary { border-color: #c4725a; color: #c4725a; }
+    .ex-btn.primary:hover { background: #1f1210; }
+    .ex-btn.stop { border-color: #7a3a3a; color: #bf6a6a; }
+    .ex-btn.stop:hover { background: #1f1010; }
+
+    #tempo-display {
+      font-size: 12px;
+      color: #555;
+      letter-spacing: 0.06em;
+    }
+    #key-display {
+      font-size: 12px;
+      color: #555;
+      letter-spacing: 0.06em;
+    }
+
+    /* Drum info */
+    #drum-info {
+      font-size: 10px;
+      color: #3a3a3a;
+      text-align: center;
+      letter-spacing: 0.05em;
+      min-height: 14px;
+    }
+
+    /* Manual chord test row */
+    .chord-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chord-btn {
+      padding: 6px 14px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      color: #666;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .chord-btn:hover { border-color: #444; color: #999; }
+    .chord-btn.active { background: #0f2a3f; border-color: #2a6a9f; color: #88bbdd; }
   </style>
 </head>
 <body>
@@ -122,77 +194,164 @@
     <div class="instrument-row" id="instrument-row"></div>
   </div>
 
-  <div>
-    <div class="section-label" style="text-align:center; margin-bottom: 10px">Test chords</div>
-    <div class="chord-row" id="chord-row"></div>
-  </div>
-
-  <div style="display:flex; flex-direction:column; align-items:center; gap:10px">
-    <div class="section-label">Drums</div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center">
-      <button class="drum-btn" id="drum-kick-btn" disabled>Kick</button>
-      <button class="drum-btn" id="drum-snare-btn" disabled>Snare</button>
-      <button class="drum-btn" id="drum-hat-btn" disabled>Hi Hat</button>
-      <button class="drum-btn" id="drum-clap-btn" disabled>Clap</button>
-      <button class="drum-btn" id="drum-rim-btn" disabled>Rim</button>
-      <button class="drum-btn" id="drum-next-btn" disabled>Next Kit →</button>
+  <!-- Exercise display -->
+  <div id="exercise-display">
+    <div style="display:flex; gap:24px; align-items:center;">
+      <div id="key-display">Key: —</div>
+      <div id="tempo-display">— BPM</div>
+    </div>
+    <div class="chord-display" id="chord-display"></div>
+    <div class="exercise-controls">
+      <button class="ex-btn primary" id="exercise-btn" disabled>▶ Start Exercise</button>
+      <button class="ex-btn" id="next-exercise-btn" disabled>Next Exercise →</button>
     </div>
     <div id="drum-info">—</div>
   </div>
 
+  <!-- Manual chord test -->
+  <div>
+    <div class="section-label" style="text-align:center; margin-bottom: 8px">Manual</div>
+    <div class="chord-row" id="chord-row"></div>
+  </div>
+
   <script>
-  // ── Voicings ─────────────────────────────────────────────────────────────
-  const CHORDS = {
-    'Am7':   { notes: [45, 55, 60, 64] },
-    'Fmaj9': { notes: [41, 52, 55, 60] },
-    'Cmaj7': { notes: [48, 52, 55, 59] },
-    'Em7':   { notes: [40, 47, 52, 55] },
-    'Dmaj9': { notes: [38, 45, 50, 54] },
-    'Bm7':   { notes: [35, 42, 45, 50] },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROFILE — hardcoded from James's 4-song analysis
+  // Will be replaced by /profile endpoint once pipeline is wired
+  // ═══════════════════════════════════════════════════════════════════════════
+  const PROFILE = {
+    // Top 2-chord movements: [fromDegree, toDegree, fromType, toType]
+    movements: [
+      { from: 6, to: 4, fromType: 'min7', toType: 'maj9', label: 'vi7 → IVmaj9' },
+      { from: 5, to: 4, fromType: 'min7', toType: 'maj7', label: 'v7 → IVmaj7'  },
+    ],
+    // Tempo range (BPM)
+    tempos: [84, 88, 92, 96, 100],
+    // Keys to cycle through (roots as semitone offsets from C)
+    keys: [
+      { root: 0,  name: 'C'  },
+      { root: 2,  name: 'D'  },
+      { root: 4,  name: 'E'  },
+      { root: 5,  name: 'F'  },
+      { root: 7,  name: 'G'  },
+      { root: 9,  name: 'A'  },
+      { root: 10, name: 'Bb' },
+    ],
+    // Syncopation: 0.42 — chord lands on beat 1 and beat 3 with an 8th-note push
+    // (anticipate beat 3 by one 8th — lands on the and-of-2)
+    // Represented as beat offsets in quarter notes from bar start
+    chordRhythm: [0, 1.5],   // beat 1, and-of-2 (anticipating beat 3)
+    beatsPerChord: 2,         // each chord gets 2 beats
+    // Swing ratio: 0.58 (light swing — 8th note pairs slightly uneven)
+    swingRatio: 0.58,
+    // Drum timbral targets
+    drumTargets: { warmth: 0.7, brightness: 0.3, roominess: 0.2, punch: 0.8, vintage: 0.6 },
   }
 
-  // ── Audio context ─────────────────────────────────────────────────────────
-  let audioCtx = null
-  let ready = false
-  let activeChord = null
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VOICING ENGINE
+  // Builds MIDI notes for a chord given root, type, and register
+  // Left hand: root + 5th (low register)
+  // Right hand: 3rd, 7th, 9th (mid-high register, open voicing)
+  // ═══════════════════════════════════════════════════════════════════════════
+  function buildVoicing(rootMidi, type) {
+    // Intervals relative to root
+    const intervals = {
+      'maj7':  { lh: [0, 7],        rh: [4, 11, 16]     },  // root,5 / 3,7,9(oct)
+      'maj9':  { lh: [0, 7],        rh: [4, 11, 14]     },  // root,5 / 3,7,9
+      'min7':  { lh: [0, 7],        rh: [3, 10, 15]     },  // root,5 / b3,b7,9
+      'min9':  { lh: [0, 7],        rh: [3, 10, 14]     },
+      'maj6':  { lh: [0, 7],        rh: [4, 9,  16]     },  // root,5 / 3,6,9
+      'dom7':  { lh: [0, 7],        rh: [4, 10, 14]     },
+    }
+    const shape = intervals[type] || intervals['maj7']
+    // Left hand — octave 2 (MIDI 36 = C2)
+    const lhBase = 36 + rootMidi
+    const lh = shape.lh.map(i => lhBase + i)
+    // Right hand — octave 4 (MIDI 60 = C4)
+    const rhBase = 60 + rootMidi
+    const rh = shape.rh.map(i => rhBase + i)
+    return [...lh, ...rh]
+  }
 
-  // ── EP-MK1 ────────────────────────────────────────────────────────────────
-  let heavyModule = null
-  let epInstance = null
-  let epEnabled = true
+  // Scale degree → semitones above root (major scale)
+  function degreeToSemitone(degree) {
+    const map = { 1:0, 2:2, 3:4, 4:5, 5:7, 6:9, 7:11 }
+    return map[degree] || 0
+  }
 
-  // ── Salamander Grand ──────────────────────────────────────────────────────
-  let salamander = null
+  // Build a concrete exercise from profile + key
+  function buildExercise(movement, key) {
+    const fromSemitone = (key.root + degreeToSemitone(movement.from)) % 12
+    const toSemitone   = (key.root + degreeToSemitone(movement.to))   % 12
+
+    // Note names for display
+    const NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B']
+    const fromName = NOTE_NAMES[fromSemitone]
+    const toName   = NOTE_NAMES[toSemitone]
+
+    const typeLabel = { maj7:'maj7', maj9:'maj9', min7:'m7', min9:'m9', maj6:'6', dom7:'7' }
+
+    return {
+      chords: [
+        {
+          name: fromName + typeLabel[movement.fromType],
+          role: movement.from === 6 ? 'vi' : movement.from === 5 ? 'v' : 'I',
+          notes: buildVoicing(fromSemitone, movement.fromType),
+        },
+        {
+          name: toName + typeLabel[movement.toType],
+          role: movement.to === 4 ? 'IV' : movement.to === 1 ? 'I' : 'II',
+          notes: buildVoicing(toSemitone, movement.toType),
+        },
+      ],
+      key,
+      movement,
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUDIO STATE
+  // ═══════════════════════════════════════════════════════════════════════════
+  let audioCtx     = null
+  let ready        = false
+  let activeChord  = null   // for manual buttons
+
+  // EP-MK1
+  let heavyModule  = null
+  let epInstance   = null
+  let epEnabled    = true
+
+  // Salamander
+  let salamander       = null
   let salamanderEnabled = true
-  let salamanderNotes = []
+  let salamanderNotes  = []
 
-  // ── Drum state ────────────────────────────────────────────────────────────
-  // pools: { Kick: [{path, features}, ...], Snare: [...], ... }
-  // Each type has a shuffled queue; when exhausted, reshuffle
-  const drumPools = {}
-  const drumQueues = {}   // current shuffled queue per type
-  const drumBuffers = {}  // decoded AudioBuffers keyed by path
-  let drumIndexes = {}    // current position in queue per type
+  // Drums
+  const drumPools   = {}
+  const drumQueues  = {}
+  const drumBuffers = {}
+  const drumIndexes = {}
 
-  const DRUM_SLOT_MAP = {
-    'kick':  'Kick',
-    'snare': 'Snare',
-    'hat':   'Hi Hats',
-    'clap':  'Claps',
-    'rim':   'Rim',
-  }
+  // Sequencer
+  let seqRunning    = false
+  let seqTimeout    = null
+  let currentExercise = null
+  let exerciseIndex = 0   // cycles through movements
+  let keyIndex      = 0   // cycles through keys
+  let tempoIndex    = 0   // cycles through tempos
 
-  // ── Instruments UI ────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INSTRUMENTS UI
+  // ═══════════════════════════════════════════════════════════════════════════
   const INSTRUMENTS = [
     { id: 'ep',  label: 'EP-MK1',          subtitle: 'Physical model' },
     { id: 'sal', label: 'Salamander Grand', subtitle: 'Acoustic piano' },
   ]
 
-  // ── Load EP-MK1 WASM ──────────────────────────────────────────────────────
   window.addEventListener('load', () => {
     if (typeof EP_MK1_Module === 'undefined') {
-      setStatus('Error: EP_MK1.js failed to load')
-      return
+      setStatus('Error: EP_MK1.js failed to load'); return
     }
     EP_MK1_Module().then(mod => {
       heavyModule = mod
@@ -201,7 +360,6 @@
     }).catch(e => setStatus('Error loading WASM: ' + e.message))
   })
 
-  // ── Start Audio ───────────────────────────────────────────────────────────
   document.getElementById('start-btn').onclick = async () => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)()
@@ -209,89 +367,278 @@
       // EP-MK1
       const blockSize = 256
       const instance = new heavyModule.EP_MK1_AudioLib({
-        sampleRate: audioCtx.sampleRate,
-        blockSize,
-        printHook: null,
-        sendHook: null,
+        sampleRate: audioCtx.sampleRate, blockSize, printHook: null, sendHook: null,
       })
       const processor = audioCtx.createScriptProcessor(
-        blockSize,
-        instance.getNumInputChannels(),
-        Math.max(instance.getNumOutputChannels(), 1)
+        blockSize, instance.getNumInputChannels(), Math.max(instance.getNumOutputChannels(), 1)
       )
       processor.onaudioprocess = e => instance.process(e)
       processor.connect(audioCtx.destination)
       epInstance = instance
       markInstrument('ep', 'active')
 
-      // Salamander Grand
+      // Salamander
       markInstrument('sal', 'loading')
       Soundfont.instrument(audioCtx, 'acoustic_grand_piano', {
         soundfont: 'MusyngKite',
         nameToUrl: (name, sf, format) =>
           `https://gleitz.github.io/midi-js-soundfonts/${sf}/${name}-${format}.js`,
-        format: 'mp3',
-        gain: 3,
-      }).then(piano => {
-        salamander = piano
-        markInstrument('sal', 'active')
-      }).catch(e => {
-        markInstrument('sal', 'error')
-        console.error('Salamander load failed:', e)
-      })
+        format: 'mp3', gain: 3,
+      }).then(piano => { salamander = piano; markInstrument('sal', 'active') })
+        .catch(e => { markInstrument('sal', 'error'); console.error(e) })
 
       ready = true
-      setStatus('Playing — use MIDI keyboard or click chords')
+      setStatus('Ready')
       document.getElementById('start-btn').style.display = 'none'
+      document.getElementById('exercise-display').classList.add('visible')
       initMidi()
-
-      // Load drum pools
       loadDrumPools()
+      prepareExercise()
 
-    } catch(e) {
-      setStatus('Audio error: ' + e.message)
-      console.error(e)
-    }
+    } catch(e) { setStatus('Audio error: ' + e.message); console.error(e) }
   }
 
-  // ── Drum pool loading ─────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXERCISE SEQUENCER
+  // ═══════════════════════════════════════════════════════════════════════════
+  function prepareExercise() {
+    const movement = PROFILE.movements[exerciseIndex % PROFILE.movements.length]
+    const key      = PROFILE.keys[keyIndex % PROFILE.keys.length]
+    currentExercise = buildExercise(movement, key)
+
+    // Update display
+    document.getElementById('key-display').textContent = 'Key: ' + key.name
+    document.getElementById('tempo-display').textContent =
+      PROFILE.tempos[tempoIndex % PROFILE.tempos.length] + ' BPM'
+
+    renderChordDisplay(currentExercise.chords, -1)
+    document.getElementById('exercise-btn').disabled = false
+    document.getElementById('next-exercise-btn').disabled = false
+  }
+
+  function renderChordDisplay(chords, activeIdx) {
+    const container = document.getElementById('chord-display')
+    container.innerHTML = ''
+    chords.forEach((chord, i) => {
+      const card = document.createElement('div')
+      card.className = 'chord-card' + (i === activeIdx ? ' playing' : '')
+      card.innerHTML = `
+        <div class="chord-name">${chord.name}</div>
+        <div class="chord-role">${chord.role}</div>
+      `
+      container.appendChild(card)
+    })
+  }
+
+  // Main loop — schedules chord hits using Web Audio clock
+  function startSequencer() {
+    if (seqRunning) { stopSequencer(); return }
+    seqRunning = true
+    document.getElementById('exercise-btn').textContent = '■ Stop'
+    document.getElementById('exercise-btn').classList.add('stop')
+    document.getElementById('exercise-btn').classList.remove('primary')
+    scheduleBar(audioCtx.currentTime)
+  }
+
+  function stopSequencer() {
+    seqRunning = false
+    clearTimeout(seqTimeout)
+    seqTimeout = null
+    // All notes off
+    if (epInstance) {
+      for (let n = 0; n < 128; n++) {
+        epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
+      }
+    }
+    renderChordDisplay(currentExercise ? currentExercise.chords : [], -1)
+    document.getElementById('exercise-btn').textContent = '▶ Start Exercise'
+    document.getElementById('exercise-btn').classList.remove('stop')
+    document.getElementById('exercise-btn').classList.add('primary')
+    setStatus('Stopped')
+  }
+
+  function scheduleBar(startTime) {
+    if (!seqRunning || !currentExercise) return
+
+    const bpm    = PROFILE.tempos[tempoIndex % PROFILE.tempos.length]
+    const beatDur = 60 / bpm  // seconds per beat
+    const swing  = PROFILE.swingRatio  // 0.58
+
+    const chords    = currentExercise.chords
+    const rhythm    = PROFILE.chordRhythm  // [0, 1.5] — beat positions
+    const noteDur   = beatDur * 1.8        // hold slightly under 2 beats
+
+    rhythm.forEach((beatOffset, i) => {
+      const chordIdx = i % chords.length
+      const chord    = chords[chordIdx]
+
+      // Apply swing to off-beats: if beatOffset has .5 component, nudge
+      let swingOffset = 0
+      if (beatOffset % 1 === 0.5) {
+        // Straight 8th would be 0.5 beats, swing pushes it later
+        swingOffset = (swing - 0.5) * beatDur
+      }
+
+      const t = startTime + beatOffset * beatDur + swingOffset
+
+      // Schedule chord on EP-MK1
+      scheduleChordAt(chord.notes, t, noteDur, chordIdx)
+
+      // Schedule drums on beat 1 and beat 3 of the bar
+      // Bar = 4 beats. Our bar has 2 chords × 2 beats each
+      scheduleDrumsAt(t, beatOffset, beatDur, swing)
+    })
+
+    // Duration of this bar = 4 beats
+    const barDur = 4 * beatDur
+    const nextBarTime = startTime + barDur
+
+    // Schedule UI update and next bar
+    const msUntilNextBar = (nextBarTime - audioCtx.currentTime) * 1000 - 50
+    seqTimeout = setTimeout(() => {
+      if (!seqRunning) return
+      // Update drum kit every 4 bars
+      if (Math.random() < 0.15) nextKit()
+      scheduleBar(nextBarTime)
+    }, Math.max(msUntilNextBar, 0))
+  }
+
+  function scheduleChordAt(notes, time, dur, chordIdx) {
+    // Visual feedback — approximate
+    const msFromNow = (time - audioCtx.currentTime) * 1000
+    setTimeout(() => {
+      if (seqRunning && currentExercise) {
+        renderChordDisplay(currentExercise.chords, chordIdx)
+      }
+    }, Math.max(msFromNow, 0))
+
+    // Note off first (clean previous)
+    if (epInstance) {
+      notes.forEach((n, i) => {
+        epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
+      })
+    }
+
+    // Note on — use Web Audio clock via setTimeout approximation
+    // EP-MK1 doesn't support scheduled MIDI so we fire slightly early
+    const fireAt = (time - audioCtx.currentTime) * 1000
+    setTimeout(() => {
+      if (!seqRunning) return
+      notes.forEach((n, i) => {
+        if (epInstance) {
+          epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
+        }
+      })
+      // Note off after duration
+      setTimeout(() => {
+        notes.forEach((n, i) => {
+          if (epInstance) epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
+        })
+      }, dur * 1000)
+    }, Math.max(fireAt, 0))
+  }
+
+  // Drum pattern derived from profile:
+  // Kick: beat 1, beat 2.5 (syncopated — 0.42 syncopation score)
+  // Snare: beat 2, beat 4
+  // Hat: every 8th note (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5)
+  // Clap: beat 2 (layered with snare occasionally)
+  function scheduleDrumsAt(barStartTime, beatOffset, beatDur, swing) {
+    if (beatOffset !== 0) return  // only schedule full drum pattern once per bar
+
+    const drumPattern = [
+      // [type, beatPosition, velocity]
+      { type: 'Kick',    beat: 0,   vel: 0.85 },
+      { type: 'Kick',    beat: 2.5, vel: 0.65 },  // syncopated
+      { type: 'Snare',   beat: 1,   vel: 0.8  },
+      { type: 'Snare',   beat: 3,   vel: 0.8  },
+      { type: 'Claps',   beat: 1,   vel: 0.55 },
+      // Hi hats — 8th notes
+      { type: 'Hi Hats', beat: 0,   vel: 0.5  },
+      { type: 'Hi Hats', beat: 0.5, vel: 0.35 },
+      { type: 'Hi Hats', beat: 1,   vel: 0.5  },
+      { type: 'Hi Hats', beat: 1.5, vel: 0.35 },
+      { type: 'Hi Hats', beat: 2,   vel: 0.5  },
+      { type: 'Hi Hats', beat: 2.5, vel: 0.35 },
+      { type: 'Hi Hats', beat: 3,   vel: 0.5  },
+      { type: 'Hi Hats', beat: 3.5, vel: 0.35 },
+    ]
+
+    drumPattern.forEach(hit => {
+      // Apply swing to off-beat 8ths
+      let swingOffset = 0
+      if (hit.beat % 1 === 0.5) {
+        swingOffset = (swing - 0.5) * beatDur
+      }
+      const t = barStartTime + hit.beat * beatDur + swingOffset
+      const msFromNow = (t - audioCtx.currentTime) * 1000
+      setTimeout(() => {
+        if (!seqRunning) return
+        const queue = drumQueues[hit.type]
+        if (!queue) return
+        const idx = drumIndexes[hit.type] % queue.length
+        const path = queue[idx]
+        if (path) playDrumSampleWithGain(path, hit.vel)
+      }, Math.max(msFromNow, 0))
+    })
+  }
+
+  function playDrumSampleWithGain(path, gain) {
+    const buf = drumBuffers[path]
+    if (!buf || !audioCtx) return
+    const source = audioCtx.createBufferSource()
+    const gainNode = audioCtx.createGain()
+    gainNode.gain.value = gain
+    source.buffer = buf
+    source.connect(gainNode)
+    gainNode.connect(audioCtx.destination)
+    source.start(audioCtx.currentTime)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXERCISE CONTROLS
+  // ═══════════════════════════════════════════════════════════════════════════
+  document.getElementById('exercise-btn').onclick = () => startSequencer()
+
+  document.getElementById('next-exercise-btn').onclick = () => {
+    const wasRunning = seqRunning
+    if (seqRunning) stopSequencer()
+    // Advance exercise, key, and tempo
+    exerciseIndex++
+    if (exerciseIndex % PROFILE.movements.length === 0) keyIndex++
+    if (keyIndex % PROFILE.keys.length === 0) tempoIndex++
+    prepareExercise()
+    if (wasRunning) setTimeout(() => startSequencer(), 100)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DRUMS
+  // ═══════════════════════════════════════════════════════════════════════════
   async function loadDrumPools() {
-    document.getElementById('drum-info').textContent = 'Loading drum pools...'
+    document.getElementById('drum-info').textContent = 'Loading drums...'
     try {
       const res = await fetch('/match-drums', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          warmth: 0.7, brightness: 0.3, roominess: 0.2,
-          punch: 0.8, vintage: 0.6, pool_size: 5
-        })
+        body: JSON.stringify({ ...PROFILE.drumTargets, pool_size: 5 })
       })
       const data = await res.json()
-      console.log('[drums] match-drums response:', JSON.stringify(data).slice(0, 300))
       const pools = data.pools
-      if (!pools || typeof pools !== 'object') {
-        throw new Error('match-drums returned no pools: ' + JSON.stringify(data).slice(0, 200))
-      }
+      if (!pools || typeof pools !== 'object') throw new Error('No pools returned')
 
-      // Store pools and initialise shuffled queues
       for (const [type, samples] of Object.entries(pools)) {
-        if (samples.length === 0) continue
-        drumPools[type] = samples.map(s => s.path)
-        drumQueues[type] = shuffle([...drumPools[type]])
+        if (!samples.length) continue
+        drumPools[type]   = samples.map(s => s.path)
+        drumQueues[type]  = shuffle([...drumPools[type]])
         drumIndexes[type] = 0
       }
 
-      // Preload all audio buffers
-      document.getElementById('drum-info').textContent = 'Preloading samples...'
       await preloadDrumBuffers()
-
-      // Enable drum buttons
-      enableDrumButtons()
       updateDrumInfo()
-
+      setStatus('Ready — click Start Exercise')
     } catch(e) {
-      document.getElementById('drum-info').textContent = 'Drum load failed: ' + e.message
-      console.error(e)
+      document.getElementById('drum-info').textContent = 'Drums unavailable'
+      console.error('[drums]', e)
     }
   }
 
@@ -300,75 +647,29 @@
     await Promise.all(allPaths.map(async path => {
       if (drumBuffers[path]) return
       try {
-        const url = '/drums/' + path.replace(' ', '%20')
-        const res = await fetch(url)
+        const encodedPath = path.split('/').map(p => encodeURIComponent(p)).join('/')
+        const res = await fetch('/drums/' + encodedPath)
         const arrayBuf = await res.arrayBuffer()
         drumBuffers[path] = await audioCtx.decodeAudioData(arrayBuf)
-      } catch(e) {
-        console.warn('Failed to load drum sample:', path, e)
-      }
+      } catch(e) { console.warn('Failed to load:', path, e) }
     }))
   }
 
-  function playDrumSample(path) {
-    const buf = drumBuffers[path]
-    if (!buf || !audioCtx) return
-    const source = audioCtx.createBufferSource()
-    source.buffer = buf
-    source.connect(audioCtx.destination)
-    source.start(audioCtx.currentTime)
-  }
-
-  // Round-robin: get next sample path for a drum type
-  function nextDrumSample(type) {
-    const queue = drumQueues[type]
-    if (!queue || queue.length === 0) return null
-    const path = queue[drumIndexes[type]]
-    drumIndexes[type]++
-    if (drumIndexes[type] >= queue.length) {
-      // Reshuffle when exhausted
-      drumQueues[type] = shuffle([...drumPools[type]])
-      drumIndexes[type] = 0
-    }
-    return path
-  }
-
-  // Advance all drum slots to next in their queue (called per exercise)
   function nextKit() {
     for (const type of Object.keys(drumPools)) {
-      nextDrumSample(type)
+      drumIndexes[type] = (drumIndexes[type] + 1) % drumQueues[type].length
     }
     updateDrumInfo()
   }
 
   function updateDrumInfo() {
-    const current = {}
+    const parts = []
     for (const [type, queue] of Object.entries(drumQueues)) {
-      const idx = (drumIndexes[type] || 0) % queue.length
-      const path = queue[idx]
-      if (path) current[type] = path.split('/').pop().replace('.wav','').replace(/_/g,' ')
+      const idx = drumIndexes[type] % queue.length
+      const name = queue[idx].split('/').pop().replace('.wav','').slice(0,20)
+      parts.push(name)
     }
-    const parts = Object.entries(current).map(([t, n]) => `${t}: ${n}`)
     document.getElementById('drum-info').textContent = parts.join('  ·  ')
-  }
-
-  function enableDrumButtons() {
-    const map = { kick: 'Kick', snare: 'Snare', hat: 'Hi Hats', clap: 'Claps', rim: 'Rim' }
-    for (const [id, type] of Object.entries(map)) {
-      const btn = document.getElementById('drum-' + id + '-btn')
-      if (btn && drumPools[type]) {
-        btn.disabled = false
-        btn.onclick = () => {
-          const path = drumQueues[type][drumIndexes[type] % drumQueues[type].length]
-          if (path) playDrumSample(path)
-        }
-      }
-    }
-    const nextBtn = document.getElementById('drum-next-btn')
-    if (nextBtn) {
-      nextBtn.disabled = false
-      nextBtn.onclick = () => nextKit()
-    }
   }
 
   function shuffle(arr) {
@@ -379,13 +680,22 @@
     return arr
   }
 
-  // ── Note on/off ───────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANUAL NOTE / CHORD PLAY
+  // ═══════════════════════════════════════════════════════════════════════════
+  const MANUAL_CHORDS = {
+    'Am7':   [45, 52, 55, 60, 64],
+    'Fmaj9': [41, 48, 52, 57, 65],
+    'Cmaj7': [48, 52, 55, 59, 64],
+    'Em7':   [40, 47, 52, 55, 59],
+    'Dmaj9': [38, 45, 50, 54, 57],
+    'Bm7':   [35, 42, 47, 50, 54],
+  }
+
   function noteOn(midi, velocity) {
     if (!ready) return
     velocity = velocity || 90
-    if (epEnabled && epInstance) {
-      epInstance.sendMidi(new Uint8Array([0x90, midi, velocity]))
-    }
+    if (epEnabled && epInstance) epInstance.sendMidi(new Uint8Array([0x90, midi, velocity]))
     if (salamanderEnabled && salamander) {
       const node = salamander.play(midi, audioCtx.currentTime, { gain: velocity / 127 * 1.5 })
       salamanderNotes.push({ midi, node })
@@ -394,9 +704,7 @@
 
   function noteOff(midi) {
     if (!ready) return
-    if (epEnabled && epInstance) {
-      epInstance.sendMidi(new Uint8Array([0x80, midi, 0]))
-    }
+    if (epEnabled && epInstance) epInstance.sendMidi(new Uint8Array([0x80, midi, 0]))
     if (salamanderEnabled && salamander) {
       const idx = salamanderNotes.findIndex(n => n.midi === midi)
       if (idx !== -1) {
@@ -406,46 +714,16 @@
     }
   }
 
-  // ── Web MIDI ──────────────────────────────────────────────────────────────
-  function initMidi() {
-    if (!navigator.requestMIDIAccess) { setMidiStatus('Web MIDI not supported'); return }
-    navigator.requestMIDIAccess().then(access => {
-      const inputs = Array.from(access.inputs.values())
-      if (inputs.length === 0) { setMidiStatus('No MIDI device found — connect and refresh'); return }
-      inputs.forEach(input => { input.onmidimessage = onMidiMessage; setMidiStatus('MIDI: ' + input.name) })
-      access.onstatechange = e => {
-        if (e.port.type === 'input' && e.port.state === 'connected') {
-          e.port.onmidimessage = onMidiMessage
-          setMidiStatus('MIDI: ' + e.port.name)
-        }
-      }
-    }).catch(e => setMidiStatus('MIDI access denied: ' + e.message))
-  }
-
-  function onMidiMessage(msg) {
-    if (!ready) return
-    const cmd = msg.data[0] & 0xf0
-    const note = msg.data[1]
-    const vel = msg.data[2]
-    if (cmd === 0x90 && vel > 0) noteOn(note, vel)
-    else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) noteOff(note)
-    if (epEnabled && epInstance) epInstance.sendMidi(msg.data)
-  }
-
-  // ── Chord buttons ─────────────────────────────────────────────────────────
   const row = document.getElementById('chord-row')
-  Object.entries(CHORDS).forEach(([name, chord]) => {
+  Object.entries(MANUAL_CHORDS).forEach(([name, notes]) => {
     const btn = document.createElement('button')
     btn.className = 'chord-btn'
     btn.textContent = name
     btn.addEventListener('mousedown', () => {
       if (!ready) return
-      if (activeChord) {
-        activeChord.notes.forEach(n => noteOff(n))
-        activeChord.btn.classList.remove('active')
-      }
-      chord.notes.forEach(n => noteOn(n, 90))
-      activeChord = { notes: chord.notes, btn }
+      if (activeChord) { activeChord.notes.forEach(n => noteOff(n)); activeChord.btn.classList.remove('active') }
+      notes.forEach(n => noteOn(n, 85))
+      activeChord = { notes, btn }
       btn.classList.add('active')
     })
     btn.addEventListener('mouseup', () => {
@@ -457,7 +735,35 @@
     row.appendChild(btn)
   })
 
-  // ── Instrument toggles ────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MIDI
+  // ═══════════════════════════════════════════════════════════════════════════
+  function initMidi() {
+    if (!navigator.requestMIDIAccess) { setMidiStatus('Web MIDI not supported'); return }
+    navigator.requestMIDIAccess().then(access => {
+      const inputs = Array.from(access.inputs.values())
+      if (!inputs.length) { setMidiStatus('No MIDI device — connect and refresh'); return }
+      inputs.forEach(i => { i.onmidimessage = onMidiMessage; setMidiStatus('MIDI: ' + i.name) })
+      access.onstatechange = e => {
+        if (e.port.type === 'input' && e.port.state === 'connected') {
+          e.port.onmidimessage = onMidiMessage; setMidiStatus('MIDI: ' + e.port.name)
+        }
+      }
+    }).catch(e => setMidiStatus('MIDI access denied: ' + e.message))
+  }
+
+  function onMidiMessage(msg) {
+    if (!ready) return
+    const cmd = msg.data[0] & 0xf0
+    const note = msg.data[1], vel = msg.data[2]
+    if (cmd === 0x90 && vel > 0) noteOn(note, vel)
+    else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) noteOff(note)
+    if (epEnabled && epInstance) epInstance.sendMidi(msg.data)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INSTRUMENT TOGGLES
+  // ═══════════════════════════════════════════════════════════════════════════
   const instRow = document.getElementById('instrument-row')
   INSTRUMENTS.forEach(inst => {
     const el = document.createElement('div')
@@ -466,14 +772,8 @@
     el.innerHTML = `<div class="dot"></div><span>${inst.label}</span>`
     el.title = inst.subtitle
     el.addEventListener('click', () => {
-      if (inst.id === 'ep') {
-        epEnabled = !epEnabled
-        el.classList.toggle('active', epEnabled)
-      } else if (inst.id === 'sal') {
-        if (!salamander) return
-        salamanderEnabled = !salamanderEnabled
-        el.classList.toggle('active', salamanderEnabled)
-      }
+      if (inst.id === 'ep') { epEnabled = !epEnabled; el.classList.toggle('active', epEnabled) }
+      else if (inst.id === 'sal') { if (!salamander) return; salamanderEnabled = !salamanderEnabled; el.classList.toggle('active', salamanderEnabled) }
     })
     instRow.appendChild(el)
   })
@@ -481,7 +781,7 @@
   function markInstrument(id, state) {
     const el = document.getElementById('inst-' + id)
     if (!el) return
-    el.classList.remove('active', 'loading')
+    el.classList.remove('active','loading')
     if (state === 'active') el.classList.add('active')
     else if (state === 'loading') el.classList.add('loading')
   }
