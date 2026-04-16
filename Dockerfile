@@ -1,7 +1,7 @@
 # ── Stage 1: compile EP-MK1 Pure Data patch → WASM ─────────────────────────
 FROM emscripten/emsdk:3.1.50 AS wasm-builder
 
-RUN pip install hvcc --break-system-packages
+RUN pip3 install hvcc
 
 COPY EP-MK1-heavy/ /patch/
 
