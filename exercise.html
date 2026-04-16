@@ -401,19 +401,24 @@
   // ═══════════════════════════════════════════════════════════════════════════
   // EXERCISE SEQUENCER
   // ═══════════════════════════════════════════════════════════════════════════
-  function prepareExercise() {
-    const movement = PROFILE.movements[exerciseIndex % PROFILE.movements.length]
-    const key      = PROFILE.keys[keyIndex % PROFILE.keys.length]
-    currentExercise = buildExercise(movement, key)
-
-    // Update display
-    document.getElementById('key-display').textContent = 'Key: ' + key.name
-    document.getElementById('tempo-display').textContent =
-      PROFILE.tempos[tempoIndex % PROFILE.tempos.length] + ' BPM'
-
-    renderChordDisplay(currentExercise.chords, -1)
-    document.getElementById('exercise-btn').disabled = false
-    document.getElementById('next-exercise-btn').disabled = false
+  async function prepareExercise() {
+    document.getElementById('exercise-btn').disabled = true
+    document.getElementById('next-exercise-btn').disabled = true
+    try {
+      const res = await fetch('/generate-exercise', { method: 'POST' })
+      const spec = await res.json()
+      currentExercise = spec
+      // Update display
+      document.getElementById('key-display').textContent = 'Key: ' + spec.key
+      document.getElementById('tempo-display').textContent = spec.tempo + ' BPM'
+      renderChordDisplay(spec.chords, -1)
+      document.getElementById('exercise-btn').disabled = false
+      document.getElementById('next-exercise-btn').disabled = false
+      setStatus(spec.movement + '  ·  ' + spec.key + '  ·  ' + spec.tempo + ' BPM')
+    } catch(e) {
+      setStatus('Failed to load exercise: ' + e.message)
+      console.error(e)
+    }
   }
 
   function renderChordDisplay(chords, activeIdx) {
@@ -460,13 +465,13 @@
   function scheduleBar(startTime) {
     if (!seqRunning || !currentExercise) return
 
-    const bpm    = PROFILE.tempos[tempoIndex % PROFILE.tempos.length]
-    const beatDur = 60 / bpm  // seconds per beat
-    const swing  = PROFILE.swingRatio  // 0.58
+    const bpm     = currentExercise.tempo
+    const beatDur = 60 / bpm
+    const swing   = currentExercise.swing_ratio
 
-    const chords    = currentExercise.chords
-    const rhythm    = PROFILE.chordRhythm  // [0, 1.5] — beat positions
-    const noteDur   = beatDur * 1.8        // hold slightly under 2 beats
+    const chords  = currentExercise.chords
+    const rhythm  = currentExercise.chord_rhythm
+    const noteDur = beatDur * 1.8
 
     rhythm.forEach((beatOffset, i) => {
       const chordIdx = i % chords.length
@@ -538,49 +543,33 @@
     }, Math.max(fireAt, 0))
   }
 
-  // Drum pattern derived from profile:
-  // Kick: beat 1, beat 2.5 (syncopated — 0.42 syncopation score)
-  // Snare: beat 2, beat 4
-  // Hat: every 8th note (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5)
-  // Clap: beat 2 (layered with snare occasionally)
   function scheduleDrumsAt(barStartTime, beatOffset, beatDur, swing) {
-    if (beatOffset !== 0) return  // only schedule full drum pattern once per bar
+    if (beatOffset !== 0) return  // schedule full pattern once per bar
+    if (!currentExercise || !currentExercise.drum_pattern) return
 
-    const drumPattern = [
-      // [type, beatPosition, velocity]
-      { type: 'Kick',    beat: 0,   vel: 0.85 },
-      { type: 'Kick',    beat: 2.5, vel: 0.65 },  // syncopated
-      { type: 'Snare',   beat: 1,   vel: 0.8  },
-      { type: 'Snare',   beat: 3,   vel: 0.8  },
-      { type: 'Claps',   beat: 1,   vel: 0.55 },
-      // Hi hats — 8th notes
-      { type: 'Hi Hats', beat: 0,   vel: 0.5  },
-      { type: 'Hi Hats', beat: 0.5, vel: 0.35 },
-      { type: 'Hi Hats', beat: 1,   vel: 0.5  },
-      { type: 'Hi Hats', beat: 1.5, vel: 0.35 },
-      { type: 'Hi Hats', beat: 2,   vel: 0.5  },
-      { type: 'Hi Hats', beat: 2.5, vel: 0.35 },
-      { type: 'Hi Hats', beat: 3,   vel: 0.5  },
-      { type: 'Hi Hats', beat: 3.5, vel: 0.35 },
-    ]
+    const pattern = currentExercise.drum_pattern
+    // Velocity map per type
+    const velMap = { 'Kick': 0.85, 'Snare': 0.8, 'Hi Hats': 0.45, 'Claps': 0.55, 'Rim': 0.5 }
+    // Off-beat hat hits are quieter
+    const offbeatVel = { 'Hi Hats': 0.3 }
 
-    drumPattern.forEach(hit => {
-      // Apply swing to off-beat 8ths
-      let swingOffset = 0
-      if (hit.beat % 1 === 0.5) {
-        swingOffset = (swing - 0.5) * beatDur
-      }
-      const t = barStartTime + hit.beat * beatDur + swingOffset
-      const msFromNow = (t - audioCtx.currentTime) * 1000
-      setTimeout(() => {
-        if (!seqRunning) return
-        const queue = drumQueues[hit.type]
-        if (!queue) return
-        const idx = drumIndexes[hit.type] % queue.length
-        const path = queue[idx]
-        if (path) playDrumSampleWithGain(path, hit.vel)
-      }, Math.max(msFromNow, 0))
-    })
+    for (const [type, beats] of Object.entries(pattern)) {
+      beats.forEach(beat => {
+        let swingOffset = 0
+        if (beat % 1 === 0.5) swingOffset = (swing - 0.5) * beatDur
+        const t = barStartTime + beat * beatDur + swingOffset
+        const msFromNow = (t - audioCtx.currentTime) * 1000
+        const isOffbeat = beat % 1 !== 0
+        const vel = isOffbeat && offbeatVel[type] ? offbeatVel[type] : (velMap[type] || 0.7)
+        setTimeout(() => {
+          if (!seqRunning) return
+          const queue = drumQueues[type]
+          if (!queue) return
+          const path = queue[drumIndexes[type] % queue.length]
+          if (path) playDrumSampleWithGain(path, vel)
+        }, Math.max(msFromNow, 0))
+      })
+    }
   }
 
   function playDrumSampleWithGain(path, gain) {
