@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download('lj1995/VoiceConversionWebUI', 'rmvpe.pt', local_dir='models/')"
 RUN python -c "from basic_pitch.inference import predict; print('Basic Pitch ONNX model OK')"
 
+# cache-bust: 2026-04-16b
 COPY app.py .
 COPY exercise.html .
 COPY audition.html .
