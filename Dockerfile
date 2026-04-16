@@ -29,6 +29,7 @@ RUN python -c "from basic_pitch.inference import predict; print('Basic Pitch ONN
 
 COPY app.py .
 COPY exercise.html .
+COPY audition.html .
 COPY rmvpe_model.py .
 COPY rmvpe_pitch.py .
 
