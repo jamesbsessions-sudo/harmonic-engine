@@ -57,7 +57,6 @@
       letter-spacing: 0.1em;
       color: #444;
     }
-    /* instrument toggles */
     .instrument-row {
       display: flex;
       gap: 10px;
@@ -88,6 +87,26 @@
     .inst-toggle.active .dot { background: #6abf72; }
     .inst-toggle.loading .dot { background: #555; animation: blink 1s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    /* drum info */
+    #drum-info {
+      font-size: 11px;
+      color: #444;
+      text-align: center;
+      letter-spacing: 0.05em;
+      min-height: 16px;
+    }
+    .drum-btn {
+      padding: 7px 14px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #888;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+    }
+    .drum-btn:hover:not(:disabled) { background: #222; border-color: #555; }
+    .drum-btn:disabled { opacity: 0.35; cursor: default; }
   </style>
 </head>
 <body>
@@ -108,6 +127,19 @@
     <div class="chord-row" id="chord-row"></div>
   </div>
 
+  <div style="display:flex; flex-direction:column; align-items:center; gap:10px">
+    <div class="section-label">Drums</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center">
+      <button class="drum-btn" id="drum-kick-btn" disabled>Kick</button>
+      <button class="drum-btn" id="drum-snare-btn" disabled>Snare</button>
+      <button class="drum-btn" id="drum-hat-btn" disabled>Hi Hat</button>
+      <button class="drum-btn" id="drum-clap-btn" disabled>Clap</button>
+      <button class="drum-btn" id="drum-rim-btn" disabled>Rim</button>
+      <button class="drum-btn" id="drum-next-btn" disabled>Next Kit →</button>
+    </div>
+    <div id="drum-info">—</div>
+  </div>
+
   <script>
   // ── Voicings ─────────────────────────────────────────────────────────────
   const CHORDS = {
@@ -119,25 +151,41 @@
     'Bm7':   { notes: [35, 42, 45, 50] },
   }
 
-  // ── Audio context (shared) ────────────────────────────────────────────────
+  // ── Audio context ─────────────────────────────────────────────────────────
   let audioCtx = null
   let ready = false
   let activeChord = null
 
-  // ── EP-MK1 (WASM) ─────────────────────────────────────────────────────────
+  // ── EP-MK1 ────────────────────────────────────────────────────────────────
   let heavyModule = null
-  let epInstance = null   // has .sendMidi()
+  let epInstance = null
   let epEnabled = true
 
-  // ── Salamander Grand (soundfont-player) ───────────────────────────────────
-  let salamander = null         // soundfont-player instrument
+  // ── Salamander Grand ──────────────────────────────────────────────────────
+  let salamander = null
   let salamanderEnabled = true
-  let salamanderNotes = []      // currently held nodes (for note-off)
+  let salamanderNotes = []
 
-  // ── Instrument definitions (for toggle UI) ────────────────────────────────
+  // ── Drum state ────────────────────────────────────────────────────────────
+  // pools: { Kick: [{path, features}, ...], Snare: [...], ... }
+  // Each type has a shuffled queue; when exhausted, reshuffle
+  const drumPools = {}
+  const drumQueues = {}   // current shuffled queue per type
+  const drumBuffers = {}  // decoded AudioBuffers keyed by path
+  let drumIndexes = {}    // current position in queue per type
+
+  const DRUM_SLOT_MAP = {
+    'kick':  'Kick',
+    'snare': 'Snare',
+    'hat':   'Hi Hats',
+    'clap':  'Claps',
+    'rim':   'Rim',
+  }
+
+  // ── Instruments UI ────────────────────────────────────────────────────────
   const INSTRUMENTS = [
-    { id: 'ep',   label: 'EP-MK1',          subtitle: 'Physical model' },
-    { id: 'sal',  label: 'Salamander Grand', subtitle: 'Acoustic piano' },
+    { id: 'ep',  label: 'EP-MK1',          subtitle: 'Physical model' },
+    { id: 'sal', label: 'Salamander Grand', subtitle: 'Acoustic piano' },
   ]
 
   // ── Load EP-MK1 WASM ──────────────────────────────────────────────────────
@@ -154,11 +202,11 @@
   })
 
   // ── Start Audio ───────────────────────────────────────────────────────────
-  document.getElementById('start-btn').onclick = () => {
+  document.getElementById('start-btn').onclick = async () => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)()
 
-      // — EP-MK1 —
+      // EP-MK1
       const blockSize = 256
       const instance = new heavyModule.EP_MK1_AudioLib({
         sampleRate: audioCtx.sampleRate,
@@ -176,7 +224,7 @@
       epInstance = instance
       markInstrument('ep', 'active')
 
-      // — Salamander Grand —
+      // Salamander Grand
       markInstrument('sal', 'loading')
       Soundfont.instrument(audioCtx, 'acoustic_grand_piano', {
         soundfont: 'MusyngKite',
@@ -187,33 +235,153 @@
       }).then(piano => {
         salamander = piano
         markInstrument('sal', 'active')
-        setStatus('Playing — use MIDI keyboard or click chords')
       }).catch(e => {
-        console.error('Salamander load failed:', e)
         markInstrument('sal', 'error')
-        setStatus('Piano failed to load — EP-MK1 only')
+        console.error('Salamander load failed:', e)
       })
 
       ready = true
-      setStatus('EP ready, piano loading...')
+      setStatus('Playing — use MIDI keyboard or click chords')
       document.getElementById('start-btn').style.display = 'none'
       initMidi()
+
+      // Load drum pools
+      loadDrumPools()
+
     } catch(e) {
       setStatus('Audio error: ' + e.message)
       console.error(e)
     }
   }
 
+  // ── Drum pool loading ─────────────────────────────────────────────────────
+  async function loadDrumPools() {
+    document.getElementById('drum-info').textContent = 'Loading drum pools...'
+    try {
+      const res = await fetch('/match-drums', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warmth: 0.7, brightness: 0.3, roominess: 0.2,
+          punch: 0.8, vintage: 0.6, pool_size: 5
+        })
+      })
+      const data = await res.json()
+      const pools = data.pools
+
+      // Store pools and initialise shuffled queues
+      for (const [type, samples] of Object.entries(pools)) {
+        if (samples.length === 0) continue
+        drumPools[type] = samples.map(s => s.path)
+        drumQueues[type] = shuffle([...drumPools[type]])
+        drumIndexes[type] = 0
+      }
+
+      // Preload all audio buffers
+      document.getElementById('drum-info').textContent = 'Preloading samples...'
+      await preloadDrumBuffers()
+
+      // Enable drum buttons
+      enableDrumButtons()
+      updateDrumInfo()
+
+    } catch(e) {
+      document.getElementById('drum-info').textContent = 'Drum load failed: ' + e.message
+      console.error(e)
+    }
+  }
+
+  async function preloadDrumBuffers() {
+    const allPaths = Object.values(drumPools).flat()
+    await Promise.all(allPaths.map(async path => {
+      if (drumBuffers[path]) return
+      try {
+        const url = '/drums/' + path.replace(' ', '%20')
+        const res = await fetch(url)
+        const arrayBuf = await res.arrayBuffer()
+        drumBuffers[path] = await audioCtx.decodeAudioData(arrayBuf)
+      } catch(e) {
+        console.warn('Failed to load drum sample:', path, e)
+      }
+    }))
+  }
+
+  function playDrumSample(path) {
+    const buf = drumBuffers[path]
+    if (!buf || !audioCtx) return
+    const source = audioCtx.createBufferSource()
+    source.buffer = buf
+    source.connect(audioCtx.destination)
+    source.start(audioCtx.currentTime)
+  }
+
+  // Round-robin: get next sample path for a drum type
+  function nextDrumSample(type) {
+    const queue = drumQueues[type]
+    if (!queue || queue.length === 0) return null
+    const path = queue[drumIndexes[type]]
+    drumIndexes[type]++
+    if (drumIndexes[type] >= queue.length) {
+      // Reshuffle when exhausted
+      drumQueues[type] = shuffle([...drumPools[type]])
+      drumIndexes[type] = 0
+    }
+    return path
+  }
+
+  // Advance all drum slots to next in their queue (called per exercise)
+  function nextKit() {
+    for (const type of Object.keys(drumPools)) {
+      nextDrumSample(type)
+    }
+    updateDrumInfo()
+  }
+
+  function updateDrumInfo() {
+    const current = {}
+    for (const [type, queue] of Object.entries(drumQueues)) {
+      const idx = (drumIndexes[type] || 0) % queue.length
+      const path = queue[idx]
+      if (path) current[type] = path.split('/').pop().replace('.wav','').replace(/_/g,' ')
+    }
+    const parts = Object.entries(current).map(([t, n]) => `${t}: ${n}`)
+    document.getElementById('drum-info').textContent = parts.join('  ·  ')
+  }
+
+  function enableDrumButtons() {
+    const map = { kick: 'Kick', snare: 'Snare', hat: 'Hi Hats', clap: 'Claps', rim: 'Rim' }
+    for (const [id, type] of Object.entries(map)) {
+      const btn = document.getElementById('drum-' + id + '-btn')
+      if (btn && drumPools[type]) {
+        btn.disabled = false
+        btn.onclick = () => {
+          const path = drumQueues[type][drumIndexes[type] % drumQueues[type].length]
+          if (path) playDrumSample(path)
+        }
+      }
+    }
+    const nextBtn = document.getElementById('drum-next-btn')
+    if (nextBtn) {
+      nextBtn.disabled = false
+      nextBtn.onclick = () => nextKit()
+    }
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }
+
   // ── Note on/off ───────────────────────────────────────────────────────────
   function noteOn(midi, velocity) {
     if (!ready) return
     velocity = velocity || 90
-
     if (epEnabled && epInstance) {
-      // EP-MK1: send raw MIDI — assign each note to its own channel for poly
       epInstance.sendMidi(new Uint8Array([0x90, midi, velocity]))
     }
-
     if (salamanderEnabled && salamander) {
       const node = salamander.play(midi, audioCtx.currentTime, { gain: velocity / 127 * 1.5 })
       salamanderNotes.push({ midi, node })
@@ -222,11 +390,9 @@
 
   function noteOff(midi) {
     if (!ready) return
-
     if (epEnabled && epInstance) {
       epInstance.sendMidi(new Uint8Array([0x80, midi, 0]))
     }
-
     if (salamanderEnabled && salamander) {
       const idx = salamanderNotes.findIndex(n => n.midi === midi)
       if (idx !== -1) {
@@ -238,20 +404,11 @@
 
   // ── Web MIDI ──────────────────────────────────────────────────────────────
   function initMidi() {
-    if (!navigator.requestMIDIAccess) {
-      setMidiStatus('Web MIDI not supported')
-      return
-    }
+    if (!navigator.requestMIDIAccess) { setMidiStatus('Web MIDI not supported'); return }
     navigator.requestMIDIAccess().then(access => {
       const inputs = Array.from(access.inputs.values())
-      if (inputs.length === 0) {
-        setMidiStatus('No MIDI device found — connect keyboard and refresh')
-        return
-      }
-      inputs.forEach(input => {
-        input.onmidimessage = onMidiMessage
-        setMidiStatus('MIDI: ' + input.name)
-      })
+      if (inputs.length === 0) { setMidiStatus('No MIDI device found — connect and refresh'); return }
+      inputs.forEach(input => { input.onmidimessage = onMidiMessage; setMidiStatus('MIDI: ' + input.name) })
       access.onstatechange = e => {
         if (e.port.type === 'input' && e.port.state === 'connected') {
           e.port.onmidimessage = onMidiMessage
@@ -268,7 +425,6 @@
     const vel = msg.data[2]
     if (cmd === 0x90 && vel > 0) noteOn(note, vel)
     else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) noteOff(note)
-    // pass everything to EP-MK1 for pitch bend, mod etc
     if (epEnabled && epInstance) epInstance.sendMidi(msg.data)
   }
 
@@ -284,7 +440,7 @@
         activeChord.notes.forEach(n => noteOff(n))
         activeChord.btn.classList.remove('active')
       }
-      chord.notes.forEach((n, i) => noteOn(n, 90))
+      chord.notes.forEach(n => noteOn(n, 90))
       activeChord = { notes: chord.notes, btn }
       btn.classList.add('active')
     })
