@@ -267,7 +267,11 @@
         })
       })
       const data = await res.json()
+      console.log('[drums] match-drums response:', JSON.stringify(data).slice(0, 300))
       const pools = data.pools
+      if (!pools || typeof pools !== 'object') {
+        throw new Error('match-drums returned no pools: ' + JSON.stringify(data).slice(0, 200))
+      }
 
       // Store pools and initialise shuffled queues
       for (const [type, samples] of Object.entries(pools)) {
