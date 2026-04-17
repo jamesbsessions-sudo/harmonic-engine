@@ -1,0 +1,1901 @@
+{
+  "version": "1.0",
+  "root": "C",
+  "total": 80,
+  "chord_types": [
+    "maj7",
+    "min7",
+    "maj9",
+    "min9",
+    "7sus4",
+    "maj6"
+  ],
+  "voicings": [
+    {
+      "id": "maj7_01",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "C4",
+        "E4",
+        "G4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 11,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_02",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_03",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "B3",
+        "E4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_04",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G4",
+        "B4",
+        "E5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 28,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_05",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3",
+        "E4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 12,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_06",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "B3",
+        "E4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 12,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_07",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "B3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "B4",
+        "E5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 12,
+      "spread_total": 28,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_08",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "B4",
+        "E5",
+        "G5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 15,
+      "spread_total": 31,
+      "voicing_style": "mid",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_09",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "B3",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        11
+      ],
+      "spread_rh": 5,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_10",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3"
+      ],
+      "interval_set": [
+        0,
+        7,
+        11
+      ],
+      "spread_rh": 4,
+      "spread_total": 11,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_11",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "E3"
+      ],
+      "rh_notes": [
+        "B3"
+      ],
+      "interval_set": [
+        0,
+        4,
+        11
+      ],
+      "spread_rh": 0,
+      "spread_total": 11,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_12",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "E4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 7,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_13",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3",
+        "C4",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_14",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "B3",
+        "C4",
+        "E4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_15",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "B4",
+        "C5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 24,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj7_16",
+      "chord_type": "maj7",
+      "lh_notes": [
+        "C3",
+        "B3"
+      ],
+      "rh_notes": [
+        "C4",
+        "E4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        11
+      ],
+      "spread_rh": 11,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_01",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "C4",
+        "Eb4",
+        "G4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 10,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_02",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3",
+        "Eb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 15,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_03",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "Eb4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_04",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G4",
+        "Bb4",
+        "Eb5"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 27,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_05",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3",
+        "Eb4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 12,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_06",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "Eb4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 12,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_07",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "Bb3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "G4",
+        "Bb4",
+        "Eb5"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 12,
+      "spread_total": 27,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_08",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "G4",
+        "Bb4",
+        "Eb5",
+        "G5"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 16,
+      "spread_total": 31,
+      "voicing_style": "mid",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_09",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "Eb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        10
+      ],
+      "spread_rh": 5,
+      "spread_total": 15,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_10",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3"
+      ],
+      "interval_set": [
+        0,
+        7,
+        10
+      ],
+      "spread_rh": 3,
+      "spread_total": 10,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_11",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "Eb3"
+      ],
+      "rh_notes": [
+        "Bb3"
+      ],
+      "interval_set": [
+        0,
+        3,
+        10
+      ],
+      "spread_rh": 0,
+      "spread_total": 10,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_12",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 7,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_13",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3",
+        "C4",
+        "Eb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 15,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_14",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "C4",
+        "Eb4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_15",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "G4",
+        "Bb4",
+        "C5"
+      ],
+      "interval_set": [
+        0,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 24,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min7_16",
+      "chord_type": "min7",
+      "lh_notes": [
+        "C3",
+        "Bb3"
+      ],
+      "rh_notes": [
+        "C4",
+        "Eb4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        3,
+        10
+      ],
+      "spread_rh": 10,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_01",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "D4",
+        "E4",
+        "G4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_02",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "B4",
+        "D5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 10,
+      "spread_total": 26,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_03",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "B3",
+        "D4",
+        "E4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_04",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3",
+        "D4",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_05",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "B3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        11
+      ],
+      "spread_rh": 7,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_06",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "E3"
+      ],
+      "rh_notes": [
+        "G3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7
+      ],
+      "spread_rh": 7,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_07",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "E3"
+      ],
+      "rh_notes": [
+        "B3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        11
+      ],
+      "spread_rh": 3,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_08",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "B3",
+        "D4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_09",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "B3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "D5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 10,
+      "spread_total": 26,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_10",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "B3"
+      ],
+      "rh_notes": [
+        "G4",
+        "B4",
+        "D5",
+        "E5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 28,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_11",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "D4",
+        "E4",
+        "B4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        11
+      ],
+      "spread_rh": 9,
+      "spread_total": 23,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj9_12",
+      "chord_type": "maj9",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "B3",
+        "D4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        11
+      ],
+      "spread_rh": 8,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_01",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "D4",
+        "Eb4",
+        "G4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_02",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "G4",
+        "Bb4",
+        "D5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 11,
+      "spread_total": 26,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_03",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4",
+        "Eb4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_04",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3",
+        "D4",
+        "Eb4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 15,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_05",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "Bb3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        10
+      ],
+      "spread_rh": 7,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_06",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "Eb3"
+      ],
+      "rh_notes": [
+        "G3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7
+      ],
+      "spread_rh": 7,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_07",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "Eb3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        10
+      ],
+      "spread_rh": 4,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_08",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_09",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "Bb3"
+      ],
+      "rh_notes": [
+        "Eb4",
+        "G4",
+        "D5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 11,
+      "spread_total": 26,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_10",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "Bb3"
+      ],
+      "rh_notes": [
+        "G4",
+        "Bb4",
+        "D5",
+        "Eb5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 27,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_11",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "D4",
+        "Eb4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        3,
+        7,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "min9_12",
+      "chord_type": "min9",
+      "lh_notes": [
+        "C3",
+        "G3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_01",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4",
+        "F4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        10
+      ],
+      "spread_rh": 7,
+      "spread_total": 17,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_02",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "F3",
+        "Bb3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_03",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "A3",
+        "Bb3",
+        "D4",
+        "F4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        9,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 17,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_04",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "D4",
+        "F4",
+        "A4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        9,
+        10
+      ],
+      "spread_rh": 11,
+      "spread_total": 21,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_05",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "C4",
+        "D4",
+        "F4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5
+      ],
+      "spread_rh": 5,
+      "spread_total": 17,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_06",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "F3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5
+      ],
+      "spread_rh": 9,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_07",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "D4",
+        "F4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        10
+      ],
+      "spread_rh": 8,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_08",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "F3",
+        "A3",
+        "Bb3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        5,
+        9,
+        10
+      ],
+      "spread_rh": 9,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_09",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "Bb3",
+        "C4",
+        "F4"
+      ],
+      "interval_set": [
+        0,
+        5,
+        10
+      ],
+      "spread_rh": 7,
+      "spread_total": 17,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_10",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "F3",
+        "Bb3",
+        "C4"
+      ],
+      "interval_set": [
+        0,
+        5,
+        10
+      ],
+      "spread_rh": 7,
+      "spread_total": 12,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_11",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "C4",
+        "F4",
+        "Bb4"
+      ],
+      "interval_set": [
+        0,
+        5,
+        10
+      ],
+      "spread_rh": 10,
+      "spread_total": 22,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "7sus4_12",
+      "chord_type": "7sus4",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "F3",
+        "Bb3"
+      ],
+      "interval_set": [
+        0,
+        5,
+        10
+      ],
+      "spread_rh": 5,
+      "spread_total": 10,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_01",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E3",
+        "G3",
+        "A3"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 5,
+      "spread_total": 9,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_02",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "G3",
+        "A3",
+        "C4",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 9,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_03",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "A3",
+        "E4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 10,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_04",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "A3",
+        "D4",
+        "G4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        7,
+        9
+      ],
+      "spread_rh": 10,
+      "spread_total": 19,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_05",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E3",
+        "A3",
+        "D4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        9
+      ],
+      "spread_rh": 10,
+      "spread_total": 14,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_06",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E3",
+        "A3"
+      ],
+      "interval_set": [
+        0,
+        4,
+        9
+      ],
+      "spread_rh": 5,
+      "spread_total": 9,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_07",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "A3",
+        "C4",
+        "E4"
+      ],
+      "interval_set": [
+        0,
+        4,
+        9
+      ],
+      "spread_rh": 7,
+      "spread_total": 16,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_08",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "D4",
+        "E4",
+        "G4",
+        "A4"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 7,
+      "spread_total": 21,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_09",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "A4",
+        "C5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 8,
+      "spread_total": 24,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_10",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E4",
+        "A4",
+        "D5",
+        "E5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        9
+      ],
+      "spread_rh": 12,
+      "spread_total": 28,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_11",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "E4",
+        "G4",
+        "A4",
+        "D5"
+      ],
+      "interval_set": [
+        0,
+        2,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 10,
+      "spread_total": 26,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    },
+    {
+      "id": "maj6_12",
+      "chord_type": "maj6",
+      "lh_notes": [
+        "C3"
+      ],
+      "rh_notes": [
+        "C4",
+        "E4",
+        "G4",
+        "A4",
+        "C5"
+      ],
+      "interval_set": [
+        0,
+        4,
+        7,
+        9
+      ],
+      "spread_rh": 12,
+      "spread_total": 24,
+      "voicing_style": "close",
+      "bass_is_root": true,
+      "root": "C"
+    }
+  ]
+}
