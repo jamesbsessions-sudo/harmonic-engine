@@ -34,6 +34,7 @@ COPY audition.html .
 COPY rmvpe_model.py .
 COPY rmvpe_pitch.py .
 COPY Drums/ ./Drums/
+COPY library/ ./library/
 
 # Copy compiled WASM from build stage
 COPY --from=wasm-builder /wasm/js/EP_MK1.js /app/static/EP_MK1.js
