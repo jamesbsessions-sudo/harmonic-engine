@@ -337,9 +337,7 @@
   let seqRunning    = false
   let seqTimeout    = null
   let currentExercise = null
-  let exerciseIndex = 0   // cycles through movements
-  let keyIndex      = 0   // cycles through keys
-  let tempoIndex    = 0   // cycles through tempos
+  // exercise cycling handled server-side by /generate-exercise
 
   // ═══════════════════════════════════════════════════════════════════════════
   // INSTRUMENTS UI
@@ -589,15 +587,14 @@
   // ═══════════════════════════════════════════════════════════════════════════
   document.getElementById('exercise-btn').onclick = () => startSequencer()
 
-  document.getElementById('next-exercise-btn').onclick = () => {
+  document.getElementById('next-exercise-btn').onclick = async () => {
     const wasRunning = seqRunning
     if (seqRunning) stopSequencer()
-    // Advance exercise, key, and tempo
-    exerciseIndex++
-    if (exerciseIndex % PROFILE.movements.length === 0) keyIndex++
-    if (keyIndex % PROFILE.keys.length === 0) tempoIndex++
-    prepareExercise()
-    if (wasRunning) setTimeout(() => startSequencer(), 100)
+    // Rotate drum kit
+    nextKit()
+    // Fetch new exercise spec from server (advances key/tempo/movement server-side)
+    await prepareExercise()
+    if (wasRunning) setTimeout(() => startSequencer(), 150)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -609,7 +606,7 @@
       const res = await fetch('/match-drums', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...PROFILE.drumTargets, pool_size: 5 })
+        body: JSON.stringify({ warmth: 0.7, brightness: 0.3, roominess: 0.2, punch: 0.8, vintage: 0.6, pool_size: 5 })
       })
       const data = await res.json()
       const pools = data.pools
