@@ -336,6 +336,7 @@
   // Sequencer
   let seqRunning    = false
   let seqTimeout    = null
+  let seqGeneration = 0   // incremented on stop — invalidates in-flight timeouts
   let currentExercise = null
   // exercise cycling handled server-side by /generate-exercise
 
@@ -440,11 +441,12 @@
     document.getElementById('exercise-btn').textContent = '■ Stop'
     document.getElementById('exercise-btn').classList.add('stop')
     document.getElementById('exercise-btn').classList.remove('primary')
-    scheduleBar(audioCtx.currentTime)
+    scheduleBar(audioCtx.currentTime, seqGeneration)
   }
 
   function stopSequencer() {
     seqRunning = false
+    seqGeneration++
     clearTimeout(seqTimeout)
     seqTimeout = null
     // All notes off
@@ -460,8 +462,8 @@
     setStatus('Stopped')
   }
 
-  function scheduleBar(startTime) {
-    if (!seqRunning || !currentExercise) return
+  function scheduleBar(startTime, gen) {
+    if (!seqRunning || !currentExercise || gen !== seqGeneration) return
 
     const bpm     = currentExercise.tempo
     const beatDur = 60 / bpm
@@ -485,11 +487,10 @@
       const t = startTime + beatOffset * beatDur + swingOffset
 
       // Schedule chord on EP-MK1
-      scheduleChordAt(chord.notes, t, noteDur, chordIdx)
+      scheduleChordAt(chord.notes, t, noteDur, chordIdx, gen)
 
-      // Schedule drums on beat 1 and beat 3 of the bar
-      // Bar = 4 beats. Our bar has 2 chords × 2 beats each
-      scheduleDrumsAt(t, beatOffset, beatDur, swing)
+      // Schedule drums
+      scheduleDrumsAt(t, beatOffset, beatDur, swing, gen)
     })
 
     // Duration of this bar = 4 beats
@@ -499,18 +500,18 @@
     // Schedule UI update and next bar
     const msUntilNextBar = (nextBarTime - audioCtx.currentTime) * 1000 - 50
     seqTimeout = setTimeout(() => {
-      if (!seqRunning) return
+      if (!seqRunning || gen !== seqGeneration) return
       // Update drum kit every 4 bars
       if (Math.random() < 0.15) nextKit()
-      scheduleBar(nextBarTime)
+      scheduleBar(nextBarTime, gen)
     }, Math.max(msUntilNextBar, 0))
   }
 
-  function scheduleChordAt(notes, time, dur, chordIdx) {
+  function scheduleChordAt(notes, time, dur, chordIdx, gen) {
     // Visual feedback — approximate
     const msFromNow = (time - audioCtx.currentTime) * 1000
     setTimeout(() => {
-      if (seqRunning && currentExercise) {
+      if (seqRunning && currentExercise && gen === seqGeneration) {
         renderChordDisplay(currentExercise.chords, chordIdx)
       }
     }, Math.max(msFromNow, 0))
@@ -526,7 +527,7 @@
     // EP-MK1 doesn't support scheduled MIDI so we fire slightly early
     const fireAt = (time - audioCtx.currentTime) * 1000
     setTimeout(() => {
-      if (!seqRunning) return
+      if (!seqRunning || gen !== seqGeneration) return
       notes.forEach((n, i) => {
         if (epInstance) {
           epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
@@ -541,7 +542,7 @@
     }, Math.max(fireAt, 0))
   }
 
-  function scheduleDrumsAt(barStartTime, beatOffset, beatDur, swing) {
+  function scheduleDrumsAt(barStartTime, beatOffset, beatDur, swing, gen) {
     if (beatOffset !== 0) return  // schedule full pattern once per bar
     if (!currentExercise || !currentExercise.drum_pattern) return
 
@@ -560,7 +561,7 @@
         const isOffbeat = beat % 1 !== 0
         const vel = isOffbeat && offbeatVel[type] ? offbeatVel[type] : (velMap[type] || 0.7)
         setTimeout(() => {
-          if (!seqRunning) return
+          if (!seqRunning || gen !== seqGeneration) return
           const queue = drumQueues[type]
           if (!queue) return
           const path = queue[drumIndexes[type] % queue.length]
