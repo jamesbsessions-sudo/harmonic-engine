@@ -226,7 +226,7 @@
       { from: 5, to: 4, fromType: 'min7', toType: 'maj7', label: 'v7 → IVmaj7'  },
     ],
     // Tempo range (BPM)
-    tempos: [84, 88, 92, 96, 100],
+    // tempos managed server-side by /generate-exercise
     // Keys to cycle through (roots as semitone offsets from C)
     keys: [
       { root: 0,  name: 'C'  },
@@ -450,7 +450,7 @@
     clearTimeout(seqTimeout)
     seqTimeout = null
     // All notes off
-    if (epInstance) {
+    if (epEnabled && epInstance) {
       for (let n = 0; n < 128; n++) {
         epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
       }
@@ -528,16 +528,17 @@
     const fireAt = (time - audioCtx.currentTime) * 1000
     setTimeout(() => {
       if (!seqRunning || gen !== seqGeneration) return
+      if (!epEnabled || !epInstance) return
       notes.forEach((n, i) => {
-        if (epInstance) {
-          epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
-        }
+        epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
       })
       // Note off after duration
       setTimeout(() => {
-        notes.forEach((n, i) => {
-          if (epInstance) epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
-        })
+        if (epEnabled && epInstance) {
+          notes.forEach((n, i) => {
+            epInstance.sendMidi(new Uint8Array([0x80, n, 0]))
+          })
+        }
       }, dur * 1000)
     }, Math.max(fireAt, 0))
   }
