@@ -528,10 +528,16 @@
     const fireAt = (time - audioCtx.currentTime) * 1000
     setTimeout(() => {
       if (!seqRunning || gen !== seqGeneration) return
-      if (!epEnabled || !epInstance) return
-      notes.forEach((n, i) => {
-        epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
-      })
+      if (epEnabled && epInstance) {
+        notes.forEach((n, i) => {
+          epInstance.sendMidi(new Uint8Array([0x90 | (i % 4), n, 85]))
+        })
+      }
+      if (salamanderEnabled && salamander) {
+        notes.forEach(n => {
+          salamander.play(n, audioCtx.currentTime, { gain: 1.2 })
+        })
+      }
       // Note off after duration
       setTimeout(() => {
         if (epEnabled && epInstance) {
